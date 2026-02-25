@@ -642,8 +642,20 @@ function computeEntryHash(entry) {
 	return crypto.createHash('sha256').update(jsonStr).digest('hex').slice(0, 16);
 }
 
+// Helper: Generate unique finding IDs
+function generateFindingId(reviewerRole, index) {
+	const rolePrefix = {
+		'clarity': 'CLR',
+		'domain_sme': 'DOM',
+		'security': 'SEC',
+		'testing': 'TST',
+		'frontend_ux': 'FE',
+	}[reviewerRole] || 'GEN';
+	return `${rolePrefix}-${String(index).padStart(3, '0')}`;
+}
+
 // Helper: Generate an audit log entry from a scenario
-function generateAuditEntry(scenario, timestamp = null) {
+function generateAuditEntry(scenario, timestamp = null, outcomeData = null) {
 	const ts = timestamp || new Date().toISOString();
 	const crypto = require('crypto');
 
@@ -651,23 +663,85 @@ function generateAuditEntry(scenario, timestamp = null) {
 	const promptHashInput = scenario.id + JSON.stringify(scenario.findings);
 	const promptHash = crypto.createHash('sha256').update(promptHashInput).digest('hex').slice(0, 12);
 
+	// Add finding_id to each finding if not present
+	const findingsWithIds = scenario.findings.map((f, idx) => ({
+		...f,
+		finding_id: f.finding_id || generateFindingId(f.reviewer_role, idx + 1),
+	}));
+
+	// Determine accepted/rejected based on outcome strategy
+	let acceptedIds = [];
+	let rejectedIds = [];
+	let rejectionDetails = {};
+
+	if (outcomeData) {
+		if (outcomeData.strategy === 'approve_high_clarity') {
+			// High clarity → approve all findings
+			if (scenario.clarity_score >= 8) {
+				acceptedIds = findingsWithIds.map(f => f.finding_id);
+			} else if (scenario.clarity_score >= 6) {
+				// Medium clarity → approve ~70% of findings
+				acceptedIds = findingsWithIds
+					.filter((_, i) => i % 3 !== 0) // 2/3 accepted
+					.map(f => f.finding_id);
+				rejectedIds = findingsWithIds
+					.filter((_, i) => i % 3 === 0)
+					.map(f => f.finding_id);
+				rejectedIds.forEach(id => {
+					rejectionDetails[id] = 'deferred';
+				});
+			} else {
+				// Low clarity → only approve major findings
+				acceptedIds = findingsWithIds
+					.filter(f => f.severity === 'blocker' || f.severity === 'major')
+					.map(f => f.finding_id);
+				rejectedIds = findingsWithIds
+					.filter(f => f.severity === 'minor' || f.severity === 'nit')
+					.map(f => f.finding_id);
+				rejectedIds.forEach(id => {
+					rejectionDetails[id] = 'deferred';
+				});
+			}
+		}
+	}
+
 	const entry = {
 		timestamp: ts,
 		original_prompt_hash: promptHash,
 		reviewers_active: ['clarity', 'domain_sme', 'testing', 'security', 'frontend_ux'],
-		findings_detail: scenario.findings,
+		findings_detail: findingsWithIds,
 		composite_score: scenario.clarity_score,
-		suggestions_accepted: [],
-		suggestions_rejected: [],
+		suggestions_accepted: acceptedIds,
+		suggestions_rejected: rejectedIds,
 		reviewer_stats: {
-			clarity: { proposed: scenario.findings.filter(f => f.reviewer_role === 'clarity').length, accepted: 0, rejected: 0 },
-			domain_sme: { proposed: scenario.findings.filter(f => f.reviewer_role === 'domain_sme').length, accepted: 0, rejected: 0 },
-			testing: { proposed: scenario.findings.filter(f => f.reviewer_role === 'testing').length, accepted: 0, rejected: 0 },
-			security: { proposed: scenario.findings.filter(f => f.reviewer_role === 'security').length, accepted: 0, rejected: 0 },
-			frontend_ux: { proposed: scenario.findings.filter(f => f.reviewer_role === 'frontend_ux').length, accepted: 0, rejected: 0 },
+			clarity: {
+				proposed: findingsWithIds.filter(f => f.reviewer_role === 'clarity').length,
+				accepted: acceptedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'clarity')).length,
+				rejected: rejectedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'clarity')).length,
+			},
+			domain_sme: {
+				proposed: findingsWithIds.filter(f => f.reviewer_role === 'domain_sme').length,
+				accepted: acceptedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'domain_sme')).length,
+				rejected: rejectedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'domain_sme')).length,
+			},
+			testing: {
+				proposed: findingsWithIds.filter(f => f.reviewer_role === 'testing').length,
+				accepted: acceptedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'testing')).length,
+				rejected: rejectedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'testing')).length,
+			},
+			security: {
+				proposed: findingsWithIds.filter(f => f.reviewer_role === 'security').length,
+				accepted: acceptedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'security')).length,
+				rejected: rejectedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'security')).length,
+			},
+			frontend_ux: {
+				proposed: findingsWithIds.filter(f => f.reviewer_role === 'frontend_ux').length,
+				accepted: acceptedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'frontend_ux')).length,
+				rejected: rejectedIds.filter(id => findingsWithIds.find(f => f.finding_id === id && f.reviewer_role === 'frontend_ux')).length,
+			},
 		},
-		outcome: 'pending',
-		rejection_details: {},
+		outcome: outcomeData ? outcomeData.outcome : 'pending',
+		rejection_details: rejectionDetails,
 	};
 
 	// Compute and attach hash (must be last step, same as cost.cjs)
@@ -675,6 +749,190 @@ function generateAuditEntry(scenario, timestamp = null) {
 
 	return entry;
 }
+
+// Tier 2: Cascading Refinements (same prompt, iteratively improved)
+const TIER_2_CASCADING = [
+	{
+		id: 'cascade-auth-v1',
+		task: 'authentication',
+		version: 1,
+		prompt: 'Add authentication',
+		clarity_score: 2.5,
+		findings: [
+			{ reviewer_role: 'clarity', severity: 'blocker', confidence: 0.96, issue: 'Scope undefined', evidence: 'Login? OAuth? 2FA?' },
+			{ reviewer_role: 'security', severity: 'major', confidence: 0.93, issue: 'No security strategy', evidence: 'JWT? Sessions? API keys?' },
+		],
+	},
+	{
+		id: 'cascade-auth-v2',
+		task: 'authentication',
+		version: 2,
+		prompt: 'Add JWT-based login: username/password → JWT token in header Authorization',
+		clarity_score: 6.2,
+		findings: [
+			{ reviewer_role: 'security', severity: 'major', confidence: 0.92, issue: 'No password hashing mentioned', evidence: 'bcrypt? argon2?' },
+			{ reviewer_role: 'testing', severity: 'minor', confidence: 0.80, issue: 'Test strategy unclear', evidence: 'Unit test JWT validation?' },
+		],
+	},
+	{
+		id: 'cascade-auth-v3',
+		task: 'authentication',
+		version: 3,
+		prompt: 'Add JWT login: (1) Accept POST /login {email, password}, (2) Hash password with bcrypt, (3) Return {token: JWT signed with SECRET}, (4) Validate JWT in middleware for protected routes. Test: valid credentials → token, invalid → 401.',
+		clarity_score: 8.7,
+		findings: [
+			{ reviewer_role: 'testing', severity: 'nit', confidence: 0.70, issue: 'Token expiry not mentioned', evidence: 'How long should JWT be valid?' },
+		],
+	},
+	// API integration cascade
+	{
+		id: 'cascade-stripe-v1',
+		task: 'payment',
+		version: 1,
+		prompt: 'Integrate payment',
+		clarity_score: 2.0,
+		findings: [
+			{ reviewer_role: 'clarity', severity: 'blocker', confidence: 0.97, issue: 'No provider specified', evidence: 'Stripe? PayPal? Square?' },
+			{ reviewer_role: 'security', severity: 'blocker', confidence: 0.95, issue: 'PCI compliance not mentioned', evidence: 'Card data handling?' },
+		],
+	},
+	{
+		id: 'cascade-stripe-v2',
+		task: 'payment',
+		version: 2,
+		prompt: 'Integrate Stripe: Add webhook for payment_intent.succeeded, update order status in database',
+		clarity_score: 5.8,
+		findings: [
+			{ reviewer_role: 'security', severity: 'major', confidence: 0.94, issue: 'Webhook signature not verified', evidence: 'Use stripe.webhooks.constructEvent()' },
+		],
+	},
+	{
+		id: 'cascade-stripe-v3',
+		task: 'payment',
+		version: 3,
+		prompt: 'Integrate Stripe: (1) POST /webhooks/stripe with Stripe signature verification, (2) Listen for payment_intent.succeeded, (3) Update order.status="paid" in DB, (4) Send customer confirmation email. Use stripe npm package for verification.',
+		clarity_score: 8.4,
+		findings: [
+			{ reviewer_role: 'testing', severity: 'nit', confidence: 0.65, issue: 'Could test webhook with stripe CLI', evidence: 'stripe listen --forward-to localhost:3000' },
+		],
+	},
+];
+
+// Tier 2: Parallel Ambiguity (same task, different descriptions at different clarity levels)
+const TIER_2_PARALLEL = [
+	{
+		id: 'parallel-cache-v1',
+		task: 'performance-caching',
+		variant: 'vague',
+		prompt: 'Add caching',
+		clarity_score: 2.8,
+		findings: [
+			{ reviewer_role: 'clarity', severity: 'blocker', confidence: 0.95, issue: 'What to cache?', evidence: 'Database? API? User sessions?' },
+			{ reviewer_role: 'domain_sme', severity: 'major', confidence: 0.92, issue: 'No cache invalidation strategy', evidence: 'TTL? Events? Manual?' },
+		],
+	},
+	{
+		id: 'parallel-cache-v2',
+		task: 'performance-caching',
+		variant: 'structured',
+		prompt: 'Add Redis caching for user profile API: Cache GET /api/users/:id for 5 minutes or on user update',
+		clarity_score: 7.0,
+		findings: [
+			{ reviewer_role: 'testing', severity: 'minor', confidence: 0.78, issue: 'Cache hit ratio test missing', evidence: 'Verify 90% requests served from cache' },
+		],
+	},
+	{
+		id: 'parallel-cache-v3',
+		task: 'performance-caching',
+		variant: 'explicit',
+		prompt: 'Add Redis caching: (1) Cache GET /api/users/:id response for 5min TTL, (2) Invalidate on PUT /users/:id, (3) Use redis.set() with EX 300, (4) Check redis.get() before DB query. Expected: 95%+ cache hits for read-heavy workloads.',
+		clarity_score: 9.1,
+		findings: [],
+	},
+	// Database performance parallel
+	{
+		id: 'parallel-index-v1',
+		task: 'database-performance',
+		variant: 'generic',
+		prompt: 'Optimize database queries',
+		clarity_score: 3.2,
+		findings: [
+			{ reviewer_role: 'domain_sme', severity: 'blocker', confidence: 0.96, issue: 'Which queries? Optimization method?', evidence: 'Indexes? Joins? Schema change?' },
+		],
+	},
+	{
+		id: 'parallel-index-v2',
+		task: 'database-performance',
+		variant: 'scoped',
+		prompt: 'Add database index on users.email for faster login lookups',
+		clarity_score: 6.8,
+		findings: [
+			{ reviewer_role: 'testing', severity: 'minor', confidence: 0.75, issue: 'Benchmark not specified', evidence: 'Before/after query time?' },
+		],
+	},
+	{
+		id: 'parallel-index-v3',
+		task: 'database-performance',
+		variant: 'complete',
+		prompt: 'Add unique index on users.email: CREATE UNIQUE INDEX idx_users_email ON users(email). Reduces login query from 50ms to <5ms. Test: query with 1M rows, verify index is used (EXPLAIN PLAN).',
+		clarity_score: 8.9,
+		findings: [],
+	},
+];
+
+// Tier 2: SWE-bench Adapted (real GitHub-style issues)
+const TIER_2_SWEBENCH = [
+	{
+		id: 'swebench-django-1',
+		task: 'framework-bug',
+		source: 'Django',
+		prompt: 'Fix: ViewDoesNotExist error when URLconf resolving fails with catch_all pattern. Expected: Return 404, not ViewDoesNotExist. See django/urls/resolvers.py line 456',
+		clarity_score: 7.8,
+		findings: [
+			{ reviewer_role: 'domain_sme', severity: 'minor', confidence: 0.85, issue: 'Framework context could be clearer', evidence: 'Explain URLconf resolution flow' },
+		],
+	},
+	{
+		id: 'swebench-react-1',
+		task: 'library-feature',
+		source: 'React',
+		prompt: 'Add useCallback hook optimization: Memoize callback functions to prevent unnecessary re-renders of child components. Update src/react/useCallback.js, add tests in __tests__/useCallback.test.js',
+		clarity_score: 7.2,
+		findings: [
+			{ reviewer_role: 'testing', severity: 'minor', confidence: 0.80, issue: 'Edge cases not listed', evidence: 'Dependency array changes? Garbage collection?' },
+		],
+	},
+	{
+		id: 'swebench-postgres-1',
+		task: 'database-optimization',
+		source: 'PostgreSQL',
+		prompt: 'Optimize: Reduce VACUUM lock time on large tables (>10GB). Implement VACUUM (PARALLEL ON) for concurrent cleanup. Estimated 50% reduction in blocking.',
+		clarity_score: 7.5,
+		findings: [
+			{ reviewer_role: 'security', severity: 'minor', confidence: 0.80, issue: 'Data consistency not mentioned', evidence: 'Verify no data loss during PARALLEL VACUUM' },
+		],
+	},
+	{
+		id: 'swebench-kubernetes-1',
+		task: 'infrastructure',
+		source: 'Kubernetes',
+		prompt: 'Add: Resource quotas for namespace prod-api. Limits: 10 CPU, 20Gi memory per pod. Requests: 2 CPU, 4Gi. Use kubectl apply -f quota.yaml',
+		clarity_score: 7.4,
+		findings: [
+			{ reviewer_role: 'domain_sme', severity: 'minor', confidence: 0.82, issue: 'Monitoring strategy missing', evidence: 'How to detect quota exceeded?' },
+		],
+	},
+	{
+		id: 'swebench-vscode-1',
+		task: 'ux-feature',
+		source: 'VS Code',
+		prompt: 'Add: Command palette search ranking by recency. Recently used commands should appear first. Update src/vs/workbench/contrib/commandPalette/',
+		clarity_score: 7.6,
+		findings: [
+			{ reviewer_role: 'testing', severity: 'minor', confidence: 0.78, issue: 'Performance metrics unclear', evidence: 'Command palette latency target?' },
+		],
+	},
+];
 
 // Generate all Tier 1 data
 function generateTier1() {
@@ -686,9 +944,40 @@ function generateTier1() {
 		if (Array.isArray(dimension)) {
 			for (const scenario of dimension) {
 				scenarios.push(scenario);
-				entries.push(generateAuditEntry(scenario));
+				entries.push(generateAuditEntry(scenario, null, { strategy: 'approve_high_clarity', outcome: 'approved' }));
 			}
 		}
+	}
+
+	return { scenarios, entries };
+}
+
+// Generate all Tier 2 data
+function generateTier2() {
+	const scenarios = [];
+	const entries = [];
+	const now = new Date();
+
+	// Cascading refinements: each task creates 3 entries (v1, v2, v3) with timestamps 1-2 days apart
+	for (const scenario of TIER_2_CASCADING) {
+		scenarios.push(scenario);
+		const daysAgo = 2 - (scenario.version - 1) * 0.5;
+		const ts = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+		entries.push(generateAuditEntry(scenario, ts, { strategy: 'approve_high_clarity', outcome: 'approved' }));
+	}
+
+	// Parallel ambiguity: each task creates 3 entries (different clarity levels, same day)
+	for (const scenario of TIER_2_PARALLEL) {
+		scenarios.push(scenario);
+		const ts = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
+		entries.push(generateAuditEntry(scenario, ts, { strategy: 'approve_high_clarity', outcome: 'approved' }));
+	}
+
+	// SWE-bench scenarios: real-world issues, all with outcome data
+	for (const scenario of TIER_2_SWEBENCH) {
+		scenarios.push(scenario);
+		const ts = new Date(now.getTime() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString();
+		entries.push(generateAuditEntry(scenario, ts, { strategy: 'approve_high_clarity', outcome: 'approved' }));
 	}
 
 	return { scenarios, entries };
@@ -718,8 +1007,27 @@ if (require.main === module) {
 				expected_outcome: 'All 5 dimensions clearly separated, r² > 0.85',
 			},
 		};
-	} else if (tier === '2' || tier === '3') {
-		console.log(`Tier ${tier} generation not yet implemented. See MOCK_DATA_STRATEGY.md for details.`);
+	} else if (tier === '2') {
+		const { scenarios, entries } = generateTier2();
+		output = {
+			tier: 2,
+			timestamp: new Date().toISOString(),
+			scenario_count: scenarios.length,
+			entry_count: entries.length,
+			scenarios,
+			entries,
+			summary: {
+				cascading_refinements: 9,
+				parallel_ambiguity: 6,
+				swebench_scenarios: 5,
+				total_outcomes: entries.length,
+				approved_count: entries.filter(e => e.outcome === 'approved').length,
+				clarity_score_range: [2.0, 9.1],
+				expected_outcome: 'Score improves monotonically in cascading, reviewer precision computable from outcome data',
+			},
+		};
+	} else if (tier === '3') {
+		console.log(`Tier 3 generation not yet implemented. See MOCK_DATA_STRATEGY.md for details.`);
 		process.exit(1);
 	} else {
 		console.error(`Unknown tier: ${tier}. Use --tier 1|2|3`);
@@ -736,4 +1044,4 @@ if (require.main === module) {
 	}
 }
 
-module.exports = { generateTier1, generateAuditEntry, TIER_1_SCENARIOS };
+module.exports = { generateTier1, generateTier2, generateAuditEntry, TIER_1_SCENARIOS, TIER_2_CASCADING, TIER_2_PARALLEL, TIER_2_SWEBENCH };

@@ -63,10 +63,13 @@ if (require.main === module) {
 	let entries;
 
 	if (tier === '1') {
-		const { entries: tierEntries } = generateTier1();
+		const { entries: tierEntries } = require('./generate-mock-data.cjs').generateTier1();
+		entries = count ? tierEntries.slice(0, count) : tierEntries;
+	} else if (tier === '2') {
+		const { entries: tierEntries } = require('./generate-mock-data.cjs').generateTier2();
 		entries = count ? tierEntries.slice(0, count) : tierEntries;
 	} else {
-		console.error(`Unknown tier: ${tier}. Currently supporting --tier 1`);
+		console.error(`Unknown tier: ${tier}. Currently supporting --tier 1|2`);
 		process.exit(1);
 	}
 
