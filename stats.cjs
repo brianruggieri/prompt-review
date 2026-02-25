@@ -131,6 +131,55 @@ function computeTopPatterns(entries) {
     .slice(0, 10);
 }
 
+function computeReviewerEffectiveness(entries) {
+  const reviewerMap = {};
+
+  for (const entry of entries) {
+    if (!entry.findings_detail || !Array.isArray(entry.findings_detail)) continue;
+
+    for (const finding of entry.findings_detail) {
+      const role = finding.reviewer_role;
+      if (!role) continue;
+
+      if (!reviewerMap[role]) {
+        reviewerMap[role] = {
+          proposed: 0,
+          accepted: 0,
+          rejected: 0,
+          review_count: 0,
+          participations: new Set(),
+        };
+      }
+
+      const findingId = finding.finding_id;
+      reviewerMap[role].proposed++;
+      reviewerMap[role].participations.add(entry.timestamp);
+
+      if (entry.suggestions_accepted && entry.suggestions_accepted.includes(findingId)) {
+        reviewerMap[role].accepted++;
+      } else if (entry.suggestions_rejected && entry.suggestions_rejected.includes(findingId)) {
+        reviewerMap[role].rejected++;
+      }
+    }
+  }
+
+  // Convert to final metrics
+  const result = {};
+  for (const [role, data] of Object.entries(reviewerMap)) {
+    const reviewCount = data.participations.size;
+    const precision = data.proposed > 0 ? data.accepted / data.proposed : 0;
+
+    result[role] = {
+      precision: Math.round(precision * 10000) / 10000,
+      proposed: data.proposed,
+      accepted: data.accepted,
+      review_count: reviewCount,
+    };
+  }
+
+  return result;
+}
+
 function renderBar(value, max) {
   const width = 10;
   const filled = Math.round((value / max) * width);
@@ -233,6 +282,24 @@ function renderDashboard(stats, days) {
     lines.push('');
   }
 
+  // Reviewer Effectiveness
+  if (stats.effectiveness && Object.keys(stats.effectiveness).length > 0) {
+    lines.push('Reviewer Effectiveness');
+
+    const PRECISION_THRESHOLD = 0.70;
+    const entries = Object.entries(stats.effectiveness)
+      .sort((a, b) => b[1].precision - a[1].precision); // Sort by precision descending
+
+    for (const [role, metrics] of entries) {
+      const precisionPct = Math.round(metrics.precision * 100);
+      const accepted = metrics.accepted;
+      const proposed = metrics.proposed;
+      const tag = metrics.precision >= PRECISION_THRESHOLD ? '' : '  ← below threshold';
+      lines.push(`  ${role.padEnd(18)} precision ${precisionPct}%  (${accepted}/${proposed} accepted)${tag}`);
+    }
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 
@@ -251,6 +318,7 @@ function generateStats(days) {
     subscores: computeSubscoreTrend(entries),
     severityTrend: computeSeverityTrend(entries),
     topPatterns: computeTopPatterns(entries),
+    effectiveness: computeReviewerEffectiveness(entries),
   };
 
   return stats;
@@ -264,6 +332,7 @@ module.exports = {
   computeOutcomes,
   computeSeverityTrend,
   computeTopPatterns,
+  computeReviewerEffectiveness,
   renderDashboard,
   renderDashboardJson,
   generateStats,
