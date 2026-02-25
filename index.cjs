@@ -96,6 +96,11 @@ function handleHook(strippedPrompt) {
   // Kill switch
   if (process.env.PROMPT_REVIEW_ENABLED === 'false') return null;
 
+  // Validate: prompt must be non-empty after stripping !!!
+  if (!strippedPrompt || strippedPrompt.trim().length === 0) {
+    return null; // Empty prompt, don't trigger review
+  }
+
   const cwd = process.cwd();
   const config = loadConfig(cwd);
   const context = buildContext({ cwd, config: config.context });
@@ -103,10 +108,16 @@ function handleHook(strippedPrompt) {
 
   if (activeReviewers.length === 0) return null;
 
-  if (config.mode === 'subscription' || !process.env.ANTHROPIC_API_KEY) {
+  // Determine if we're using subscription mode as fallback
+  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+  const isApiModeRequested = config.mode === 'api';
+  const usingSubscriptionFallback = isApiModeRequested && !hasApiKey;
+
+  if (config.mode === 'subscription' || !hasApiKey) {
     // Subscription mode: return additionalContext that tells Claude to use /prompt-review
     return {
       additionalContext: buildSubscriptionContext(strippedPrompt, activeReviewers, context, config),
+      warning: usingSubscriptionFallback ? 'API mode requested but no ANTHROPIC_API_KEY found; using subscription mode' : null,
     };
   }
 
@@ -123,10 +134,26 @@ function buildSubscriptionContext(prompt, activeReviewers, context, config) {
     'security', 'testing', 'domain_sme', 'documentation', 'frontend_ux', 'clarity'
   ];
 
+  // Determine execution mode for warning
+  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
+  const isApiModeRequested = config.mode === 'api';
+  const usingSubscriptionFallback = isApiModeRequested && !hasApiKey;
+
   let instructions = `[PROMPT REVIEW TRIGGERED]
 
 The user's prompt has been flagged for review. Run the prompt review pipeline:
+`;
 
+  // Add warning if applicable
+  if (usingSubscriptionFallback) {
+    instructions += `⚠️  API mode was requested (config.mode='api') but ANTHROPIC_API_KEY is not set.
+Falling back to subscription mode (Claude-guided async review via /prompt-review:review skill).
+To use full async API mode, set ANTHROPIC_API_KEY environment variable or change config.mode to 'subscription'.
+
+`;
+  }
+
+  instructions += `
 ## Original Prompt (stripped of !!! trigger)
 
 ${prompt}

@@ -232,6 +232,105 @@ Your next reviews will use improved weights, better matching your preferences.
 
 ---
 
+## Understanding Triggers: Hook vs Skill vs API
+
+The `!!!` trigger has three different behaviors depending on how you invoke it. Understanding these modes is key to using the tool effectively.
+
+### Hook Mode (Automatic)
+
+When you type a prompt in Claude Code with `!!!` at the end:
+
+```
+Write a function that validates email addresses !!!
+```
+
+**What happens:**
+1. The hook automatically triggers on any message (UserPromptSubmit)
+2. Claude receives instructions to run `/prompt-review:review` skill
+3. You see a notification to proceed with review
+4. You must explicitly invoke the skill to start
+
+**Key points:**
+- ✓ Automatic trigger (you don't need to do anything)
+- ✓ Works in all modes (no API key needed)
+- ✓ Safe and predictable (never executes code without your approval)
+- ✗ Requires manual skill invocation (not truly automatic execution)
+- ✗ Cannot run full async pipeline (uses subscription mode)
+
+### Skill Mode (Manual)
+
+When you explicitly invoke the skill with a prompt:
+
+```
+/prompt-review:review "Write a function that validates email addresses"
+```
+
+**What happens:**
+1. You explicitly request the review
+2. If `ANTHROPIC_API_KEY` is set and `config.mode='api'`, reviewers run in parallel and complete inline
+3. If no API key or `config.mode='subscription'`, you see instructions to use the skill
+4. Full debate mode can run if conflicts are detected (Phase 3)
+
+**Key points:**
+- ✓ Explicit, clear intent
+- ✓ Can use API mode if configured
+- ✓ Full async pipeline available
+- ✗ Manual invocation (you must remember to use it)
+
+### API Mode (Full Async)
+
+When you have `ANTHROPIC_API_KEY` set and `config.mode='api'`:
+
+```bash
+export ANTHROPIC_API_KEY="sk-..."
+node index.cjs "Write a function that validates email addresses"
+```
+
+**What happens:**
+1. All 6 reviewers run in parallel
+2. Results are merged with conflict detection
+3. Optional: Debate phase runs if conflicts exist
+4. Full output (refined prompt + findings) is returned
+5. Review is logged to audit trail
+
+**Key points:**
+- ✓ True async execution (all reviewers run in parallel)
+- ✓ Full debate mode support
+- ✓ Direct CLI/programmatic access
+- ✗ Requires API key
+- ✗ Not available via hook
+
+### Mode Comparison Table
+
+| Trigger | Mode | API Key | Execution | Debate | Best For |
+|---------|------|---------|-----------|--------|----------|
+| Hook | Subscription | Optional | Async (via Claude) | Yes* | Quick feedback while coding |
+| Skill | Subscription | Optional | Async (via Claude) | Yes* | Explicit reviews without API key |
+| Skill/CLI | API | Required | Sync (inline) | Yes | Full async pipeline in CI/automation |
+
+*Debate mode available if conflicts detected; proposals logged for review
+
+### Configuration
+
+To control which mode is used, edit `~/.claude/plugins/prompt-review/config.json`:
+
+```json
+{
+  "mode": "subscription",  // or "api" for full async
+  "api_fallback": true,    // Fall back to subscription if no API key
+  "reviewers": {
+    "security": { "enabled": true, "conditional": false },
+    ...
+  }
+}
+```
+
+**`mode` options:**
+- `"subscription"` (default) — Use Claude Code's skill system for reviews
+- `"api"` — Use direct async pipeline (requires ANTHROPIC_API_KEY)
+
+---
+
 ## Installation
 
 ### Option 1: For Users (Recommended)
