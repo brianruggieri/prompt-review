@@ -6,33 +6,99 @@
     "editor": "claude-sonnet-4-6"
   },
   "reviewers": {
-    "domain_sme":    { "enabled": true,  "conditional": false },
-    "security":      { "enabled": true,  "conditional": false },
-    "clarity":       { "enabled": true,  "conditional": false },
-    "testing":       { "enabled": true,  "conditional": false },
-    "frontend_ux":   { "enabled": true,  "conditional": true,
+    "domain_sme": {
+      "enabled": true,
+      "conditional": false
+    },
+    "security": {
+      "enabled": true,
+      "conditional": false
+    },
+    "clarity": {
+      "enabled": true,
+      "conditional": false
+    },
+    "testing": {
+      "enabled": true,
+      "conditional": false
+    },
+    "frontend_ux": {
+      "enabled": true,
+      "conditional": true,
       "triggers": {
-        "prompt_keywords": ["component", "modal", "CSS", "style", "layout",
-                            "form", "button", "a11y", "accessibility",
-                            "responsive", "UI", "UX", "settings tab"],
-        "file_patterns": ["*.css", "*.scss", "*.tsx", "*.vue", "*.svelte",
-                          "settings.ts", "styles.css"],
-        "stack_markers": ["react", "vue", "svelte", "nextjs", "tailwind",
-                          "obsidian-plugin"]
+        "prompt_keywords": [
+          "component",
+          "modal",
+          "CSS",
+          "style",
+          "layout",
+          "form",
+          "button",
+          "a11y",
+          "accessibility",
+          "responsive",
+          "UI",
+          "UX",
+          "settings tab"
+        ],
+        "file_patterns": [
+          "*.css",
+          "*.scss",
+          "*.tsx",
+          "*.vue",
+          "*.svelte",
+          "settings.ts",
+          "styles.css"
+        ],
+        "stack_markers": [
+          "react",
+          "vue",
+          "svelte",
+          "nextjs",
+          "tailwind",
+          "obsidian-plugin"
+        ]
       }
     },
-    "documentation": { "enabled": true,  "conditional": true,
+    "documentation": {
+      "enabled": true,
+      "conditional": true,
       "triggers": {
-        "prompt_keywords": ["feature", "add", "new", "remove", "change",
-                            "refactor", "setting", "command", "API"],
-        "project_markers": ["docs/", "screenshots/", "CHANGELOG", "README"],
-        "skip_keywords": ["bugfix", "typo", "lint", "format"]
+        "prompt_keywords": [
+          "feature",
+          "add",
+          "new",
+          "remove",
+          "change",
+          "refactor",
+          "setting",
+          "command",
+          "API"
+        ],
+        "project_markers": [
+          "docs/",
+          "screenshots/",
+          "CHANGELOG",
+          "README"
+        ],
+        "skip_keywords": [
+          "bugfix",
+          "typo",
+          "lint",
+          "format"
+        ]
       }
     }
   },
   "editor": {
-    "priority_order": ["security", "testing", "domain_sme", "documentation",
-                        "frontend_ux", "clarity"],
+    "priority_order": [
+      "security",
+      "testing",
+      "domain_sme",
+      "documentation",
+      "frontend_ux",
+      "clarity"
+    ],
     "temperature": 0,
     "max_retries": 1
   },
@@ -52,20 +118,20 @@
     "enabled": true,
     "display": true,
     "weights": {
-      "security": 2.0,
+      "security": 2,
       "testing": 1.5,
       "domain_sme": 1.5,
-      "documentation": 1.0,
-      "frontend_ux": 1.0,
-      "clarity": 1.0
+      "documentation": 1,
+      "frontend_ux": 1,
+      "clarity": 1
     },
     "weights_history": []
   },
   "reflection": {
     "min_reviews_for_adaptation": 5,
-    "precision_threshold": 0.70,
+    "precision_threshold": 0.7,
     "weight_clamp_min": 0.5,
-    "weight_clamp_max": 3.0,
+    "weight_clamp_max": 3,
     "auto_adapt": false,
     "auto_adapt_interval_days": 30
   },
@@ -75,5 +141,8 @@
     "model": "claude-haiku-4-5",
     "judge_model": "claude-sonnet-4-6",
     "min_conflicts_to_trigger": 1
+  },
+  "clarity_gate": {
+    "enabled": true
   }
 }

@@ -19,11 +19,12 @@ The system doesn't just review once. It tracks which suggestions you accept or r
 
 ### Key Features
 
+- **Clarity Gate** — Pre-screening runs only the Clarity reviewer first, rejecting/warning on ambiguous prompts before full review (saves time & resources)
 - **Parallel Specialist Review** — Six specialist roles evaluate your prompt simultaneously (security, testing, clarity, domain expertise, UX, documentation)
 - **Adaptive Learning** — System learns from your accept/reject decisions and reweights reviewer importance accordingly
 - **Conflict Resolution** — Optional debate mode when reviewers disagree, with LLM judge extracting quality insights
 - **Zero Dependencies** — CommonJS, Node.js built-ins only, no framework overhead
-- **Comprehensive Testing** — 12 passing tests covering all features and edge cases
+- **Comprehensive Testing** — 16 passing tests covering all features and edge cases
 - **Local Audit Trail** — Full review history stored locally with findings, stats, and outcomes
 
 ---
@@ -78,6 +79,39 @@ The system doesn't just review once. It tracks which suggestions you accept or r
         │  └─ Phase 3: Improve prompts   │
         └────────────────────────────────┘
 ```
+
+### Clarity Gate (Optional Pre-Screening)
+
+By default, the system uses a **two-stage review process**:
+
+1. **Stage 1: Clarity Gate** (fast, 5-10 seconds)
+   - Runs only the Clarity reviewer
+   - Checks for ambiguity, vagueness, undefined terms
+   - Blocks prompts with **blocker** severity
+   - Warns on **major** severity (user can choose to refine or proceed)
+   - Proceeds to full review on **minor/nit** severity
+
+2. **Stage 2: Full Review** (30-40 seconds if gate passes)
+   - All 6 specialist reviewers run in parallel
+   - Merge findings and present diff to user
+
+**Why the gate?** Saves time and resources by catching vague prompts early. A prompt like "do stuff with stuff" gets rejected at the gate with a clear message: "Please specify what 'stuff' is and what you want to do." The user refines it, and the second attempt passes the gate and gets the full review.
+
+**Configuration:**
+```json
+{
+  "clarity_gate": {
+    "enabled": true,
+    "strict_mode": false,
+    "reject_on": ["blocker"],
+    "warn_on": ["major"],
+    "auto_refine": true,
+    "show_reasoning": true
+  }
+}
+```
+
+To disable the gate, set `enabled: false` in `config.json`.
 
 ### The Three-Phase Learning System
 

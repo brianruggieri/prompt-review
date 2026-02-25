@@ -222,35 +222,98 @@ Each reviewer returns JSON:
 }
 
 /**
+ * Run clarity reviewer in isolation for the gate check.
+ * Returns a critique object or null if clarity reviewer not available.
+ */
+function runClarityGateCheck(prompt, context, config) {
+	const clarityReviewer = require(require('path').join(__dirname, 'reviewers', 'clarity.cjs'));
+	if (!clarityReviewer) return null;
+
+	const { system, user } = clarityReviewer.buildPrompt(prompt, context);
+
+	// For gate check, we simulate the clarity review locally without API call
+	// In subscription mode, this would be run by Claude; here we just structure the request
+	return {
+		reviewer_role: 'clarity',
+		system,
+		user,
+		// Marker that this is a gate check (for testing/debugging)
+		_is_gate_check: true,
+	};
+}
+
+/**
+ * Determine gate action based on clarity review severity.
+ * Returns one of: "proceed", "warn", "block"
+ */
+function determineGateAction(severityMax, config) {
+	if (!config.clarity_gate || !config.clarity_gate.enabled) {
+		return 'proceed'; // Gate disabled
+	}
+
+	if (config.clarity_gate.reject_on && config.clarity_gate.reject_on.includes(severityMax)) {
+		return 'block';
+	}
+
+	if (config.clarity_gate.warn_on && config.clarity_gate.warn_on.includes(severityMax)) {
+		// In strict mode, treat "warn" as "block"
+		return config.clarity_gate.strict_mode ? 'block' : 'warn';
+	}
+
+	return 'proceed';
+}
+
+/**
  * Handle skill invocation — called when /prompt-review is used directly.
- * Returns structured data for the skill to present.
+ * Returns structured data for the skill to present, or gate result if gate is triggered.
  */
 function handleSkill(prompt) {
-  if (process.env.PROMPT_REVIEW_ENABLED === 'false') {
-    return { skipped: true, reason: 'PROMPT_REVIEW_ENABLED=false' };
-  }
+	if (process.env.PROMPT_REVIEW_ENABLED === 'false') {
+		return { skipped: true, reason: 'PROMPT_REVIEW_ENABLED=false' };
+	}
 
-  const cwd = process.cwd();
-  const config = loadConfig(cwd);
-  const context = buildContext({ cwd, config: config.context });
-  const activeReviewers = determineActiveReviewers(config, prompt, context);
+	const cwd = process.cwd();
+	const config = loadConfig(cwd);
+	const context = buildContext({ cwd, config: config.context });
 
-  return {
-    prompt,
-    config,
-    context: {
-      projectName: context.projectName,
-      stack: context.stack,
-      testFramework: context.testFramework,
-      buildTool: context.buildTool,
-      conventions: context.conventions,
-    },
-    activeReviewers,
-    reviewerPrompts: buildReviewerPrompts(activeReviewers, prompt, context),
-    priorityOrder: config.editor?.priority_order || [
-      'security', 'testing', 'domain_sme', 'documentation', 'frontend_ux', 'clarity'
-    ],
-  };
+	// Stage 1: Check clarity gate (if enabled)
+	if (config.clarity_gate && config.clarity_gate.enabled) {
+		const clarityCheck = runClarityGateCheck(prompt, context, config);
+		if (clarityCheck) {
+			// Return gate check structure so Claude can run clarity review and report back
+			return {
+				_clarity_gate: true,
+				prompt,
+				gateCheckPrompt: clarityCheck.user,
+				gateCheckSystem: clarityCheck.system,
+				config: {
+					clarity_gate: config.clarity_gate,
+					editor: config.editor,
+				},
+				instruction: `Run CLARITY REVIEW ONLY. Return JSON response. If severity_max is blocker or major (depending on config), report gate decision.`,
+			};
+		}
+	}
+
+	// Stage 2: Gate passed or disabled; prepare full review
+	const activeReviewers = determineActiveReviewers(config, prompt, context);
+
+	return {
+		prompt,
+		config,
+		context: {
+			projectName: context.projectName,
+			stack: context.stack,
+			testFramework: context.testFramework,
+			buildTool: context.buildTool,
+			conventions: context.conventions,
+		},
+		activeReviewers,
+		reviewerPrompts: buildReviewerPrompts(activeReviewers, prompt, context),
+		priorityOrder: config.editor?.priority_order || [
+			'security', 'testing', 'domain_sme', 'documentation', 'frontend_ux', 'clarity'
+		],
+	};
 }
 
 /**
@@ -596,4 +659,6 @@ module.exports = {
   loadConfig,
   deepMerge,
   updateOutcome,
+  runClarityGateCheck,
+  determineGateAction,
 };
