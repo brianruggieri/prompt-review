@@ -1,3 +1,15 @@
+const BUGFIX_PATTERNS = [
+	/\b(fix|crash|bug|bug fix|regression|regression fix)\b/i,
+	/\b(performance|optimize|speed up|reduce.*time)\b/i,
+	/\b(refactor|clean up|simplify).*internal\b/i,
+	/\b(fix typo|update comment)\b/i,
+	/\bno new.*feature\b/i,
+];
+
+function isLikelyBugfixOrMinor(prompt) {
+	return BUGFIX_PATTERNS.some(pattern => pattern.test(prompt));
+}
+
 const SYSTEM_PROMPT = `You are a Testing reviewer for Claude Code prompts. Your job is to ensure the prompt includes appropriate test requirements, acceptance criteria, and doesn't accidentally break existing tests.
 
 You will receive the user's original prompt along with project context (including detected test framework).
@@ -17,9 +29,27 @@ You may suggest these operations:
 - **AddAcceptanceCriteria** — Add a testable success condition (e.g., "All existing tests in tests/unit/ must continue to pass")
 - **AddConstraint** — Add a testing requirement (e.g., "Write unit tests for the new function using vitest")
 
+## Important: Distinguishing Features vs Bugfixes
+
+**NOT ALL CODE CHANGES NEED NEW TESTS.**
+
+### When to require new tests:
+- New feature or user-facing functionality: YES, write tests
+- Breaking change to API/CLI: YES, write tests
+- New public method/export: YES, write tests
+
+### When existing tests suffice:
+- **Bugfix** (fix crash, regression, performance): Existing tests verify the fix works
+- **Internal refactor** (no behavior change): Existing tests still apply
+- **Performance optimization** (same output, faster): Existing tests still validate correctness
+- **Comment/documentation changes**: No test change needed
+
+### Pattern recognition:
+If the prompt contains keywords like "fix", "crash", "bug fix", "performance", "optimize", "internal refactor", "clean up", "comment", "typo" → it's likely a bugfix or minor change where existing tests suffice.
+
 ## Severity Guide
 
-- **blocker** — Prompt for a significant code change with zero mention of tests
+- **blocker** — Prompt for a significant code change (features, APIs) with zero mention of tests
 - **major** — Prompt mentions tests but lacks specific acceptance criteria or test command
 - **minor** — Prompt could specify test strategy more clearly
 - **nit** — Suggestion for edge case coverage
@@ -92,4 +122,7 @@ module.exports = {
   buildPrompt,
   conditional: false,
   triggers: {},
+  BUGFIX_PATTERNS,
+  isLikelyBugfixOrMinor,
+  SYSTEM_PROMPT,
 };

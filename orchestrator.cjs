@@ -22,7 +22,49 @@ function loadReviewer(role) {
   }
 }
 
-function shouldFireConditional(triggers, prompt, context) {
+function shouldFireFrontendUX(triggers, prompt, context) {
+  // Frontend/UX has stricter multi-factor requirements to avoid false positives
+  const promptLower = prompt.toLowerCase();
+
+  // Check skip keywords first — if any match, don't fire
+  if (triggers.skip_keywords && triggers.skip_keywords.length > 0) {
+    for (const keyword of triggers.skip_keywords) {
+      if (promptLower.includes(keyword.toLowerCase())) {
+        return false;
+      }
+    }
+  }
+
+  // Multi-factor check: Need at least one of:
+  // 1. Two or more UI keywords
+  // 2. One UI keyword AND UI file patterns found
+  // 3. UI files present AND no backend-specific keywords
+
+  const uiKeywords = triggers.prompt_keywords || [];
+  const uiKeywordCount = uiKeywords.filter(kw => promptLower.includes(kw.toLowerCase())).length;
+
+  // Check for UI file patterns
+  const uiFilePatterns = triggers.file_patterns || ['*.css', '*.scss', '*.tsx', '*.vue', '*.svelte'];
+  const hasUIFiles = context.files && context.files.some(f => {
+    return uiFilePatterns.some(pattern => {
+      const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+      return regex.test(f);
+    });
+  });
+
+  // Check for backend/non-UI keywords (rules out false positives like "component algorithm")
+  const backendKeywords = ['algorithm', 'architecture', 'performance', 'database', 'query', 'index', 'schema'];
+  const hasBackendContext = backendKeywords.some(kw => promptLower.includes(kw));
+
+  // Decision logic
+  if (uiKeywordCount >= 2) return true;               // 2+ UI keywords → fire
+  if (uiKeywordCount >= 1 && hasUIFiles) return true; // 1+ UI keywords + UI files → fire
+  if (hasUIFiles && !hasBackendContext) return true;  // UI files present and no backend keywords → fire
+
+  return false;
+}
+
+function shouldFireConditional(triggers, prompt, context, role) {
   if (!triggers) return false;
   const promptLower = prompt.toLowerCase();
 
@@ -76,7 +118,15 @@ function determineActiveReviewers(config, prompt, context) {
       active.push(role);
     } else {
       // Conditional reviewer — check triggers
-      if (shouldFireConditional(settings.triggers, prompt, context)) {
+      let shouldFire = false;
+      if (role === 'frontend_ux') {
+        // Frontend/UX uses multi-factor trigger logic
+        shouldFire = shouldFireFrontendUX(settings.triggers, prompt, context);
+      } else {
+        shouldFire = shouldFireConditional(settings.triggers, prompt, context, role);
+      }
+
+      if (shouldFire) {
         active.push(role);
       }
     }
@@ -165,6 +215,7 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
 
 module.exports = {
   shouldFireConditional,
+  shouldFireFrontendUX,
   determineActiveReviewers,
   buildReviewerPrompts,
   runReviewersSubscription,

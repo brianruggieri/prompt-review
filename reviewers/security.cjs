@@ -1,3 +1,31 @@
+const UNSAFE_OPERATIONS_SEVERITY = {
+	// Blockers: permanent data loss, system compromise
+	'DROP TABLE': 'blocker',
+	'DROP DATABASE': 'blocker',
+	'DELETE FROM': 'blocker',
+	'rm -rf': 'blocker',
+	'eval(': 'blocker',
+	'exec(': 'blocker',
+	'__import__': 'blocker',
+	'subprocess.call': 'blocker',
+	'os.system': 'blocker',
+
+	// Major: breaking changes, hard to recover
+	'git push --force': 'major',
+	'git reset --hard': 'major',
+	'git branch -D': 'major',
+	'TRUNCATE': 'major',
+	'chmod 777': 'major',
+	'chmod 000': 'major',
+	'ALTER TABLE': 'major',
+	'DROP COLUMN': 'major',
+
+	// Minor: risky but recoverable
+	'ln -s': 'minor',
+	'chmod 755': 'minor',
+	'chmod 644': 'minor',
+};
+
 const SYSTEM_PROMPT = `You are a Security reviewer for Claude Code prompts. Your job is to identify security risks in how the prompt instructs Claude to operate — injection vectors, secret exposure, unsafe tool use, and missing safety boundaries.
 
 You will receive the user's original prompt along with project context.
@@ -19,9 +47,25 @@ You may suggest these operations:
 
 ## Severity Guide
 
-Security findings are **blocker** or **major** only:
-- **blocker** — Prompt actively risks secret exposure, data loss, or code injection
-- **major** — Prompt is missing standard security practices that should be explicit
+Security findings are classified by severity of impact:
+
+### **Blocker** — Permanent data loss or system compromise risk
+- Destructive database operations: DROP TABLE, DROP DATABASE, DELETE FROM..., TRUNCATE
+- Filesystem destruction: rm -rf, destructive shell scripts
+- Code execution vulnerabilities: eval(), exec(), __import__(), dangerous deserialization
+- Secret exposure: API key/credential generation or logging
+- Authentication bypass or injection vulnerabilities
+
+### **Major** — Breaking changes, hard to recover
+- Breaking git operations: git push --force, git reset --hard, git branch -D
+- System permission changes: chmod 777, chmod 000
+- Infrastructure modifications: security group changes, firewall rules
+- Data modifications (non-destructive): schema changes, data transformations
+
+### **Minor** — Risky but recoverable
+- File permission changes (limited): chmod 755, chmod 644
+- Symbolic links or redirects: ln -s, symlink creation
+- Non-destructive system operations: mkdir, touch, log operations
 
 ## Output Format
 
@@ -86,4 +130,6 @@ module.exports = {
   buildPrompt,
   conditional: false,
   triggers: {},
+  UNSAFE_OPERATIONS_SEVERITY,
+  SYSTEM_PROMPT,
 };
