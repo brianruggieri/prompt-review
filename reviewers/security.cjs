@@ -38,6 +38,8 @@ You will receive the user's original prompt along with project context.
 4. **Instruction hierarchy** — Does the prompt maintain clear boundaries between system instructions, user instructions, and data being processed?
 5. **Overprivileged operations** — Does the prompt grant more access or capability than needed for the task?
 6. **Output safety** — Could the generated output contain XSS, SQL injection, command injection, or other OWASP Top 10 vulnerabilities?
+   - **Template vulnerability:** If using templating engines (Handlebars, EJS, Pug, Jinja2), is output escaping explicitly mentioned?
+   - **HTML generation:** If generating HTML, is user data sanitization specified? (innerHTML, dangerouslySetInnerHTML are risky)
 
 ## Your Operations
 
@@ -105,6 +107,54 @@ Additionally, include a "score" field (0-10) rating the prompt's safety posture:
 
 The score reflects the ORIGINAL prompt's quality, not the quality after your suggested fixes.`;
 
+const TEMPLATE_ENGINES = ['handlebars', 'ejs', 'pug', 'jinja2', 'mustache', 'nunjucks', 'liquid', 'hbs'];
+
+function detectTemplateLanguage(prompt) {
+	const lower = prompt.toLowerCase();
+	return TEMPLATE_ENGINES.find(eng => lower.includes(eng));
+}
+
+function checkTemplateOutputSafety(prompt) {
+	const findings = [];
+
+	const templateEngine = detectTemplateLanguage(prompt);
+	const usesTemplate = !!templateEngine;
+	const mentionsEscaping = /escap|sanitiz|encode|htmlentities|xss|safehtml|markup/i.test(prompt);
+	const mentionsUserData = /user (input|data)|untrusted|malicious|injection/i.test(prompt);
+
+	// Finding 1: Template without explicit escaping/sanitization
+	if (usesTemplate && !mentionsEscaping) {
+		findings.push({
+			severity: 'major',
+			confidence: 0.85,
+			issue: `Template engine ${templateEngine} used without explicit escaping/sanitization`,
+			evidence: `Prompt uses ${templateEngine} but doesn't mention escaping, sanitization, or XSS prevention`,
+		});
+	}
+
+	// Finding 2: Generic "Generate HTML" without guardrails
+	if (/generate.*html|create.*html|build.*html/i.test(prompt) && !mentionsEscaping) {
+		findings.push({
+			severity: 'major',
+			confidence: 0.80,
+			issue: 'HTML generation without explicit XSS prevention',
+			evidence: 'Prompt generates HTML but doesn\'t specify user data handling or escaping',
+		});
+	}
+
+	// Finding 3: innerHTML or similar risky operations
+	if (/innerhtml|dangerously.*html|raw.*html|html\s*=|document\.write/i.test(prompt) && !mentionsEscaping) {
+		findings.push({
+			severity: 'blocker',
+			confidence: 0.90,
+			issue: 'Direct HTML injection pattern detected',
+			evidence: 'Prompt mentions dangerous HTML patterns (innerHTML, dangerouslySetInnerHTML) without sanitization',
+		});
+	}
+
+	return findings;
+}
+
 function buildPrompt(originalPrompt, context) {
   let userContent = `## Original Prompt\n\n${originalPrompt}\n\n## Project Context\n\n`;
 
@@ -114,6 +164,12 @@ function buildPrompt(originalPrompt, context) {
   if (context.stack && context.stack.length > 0) {
     userContent += `**Stack:** ${context.stack.join(', ')}\n`;
   }
+
+	const templateEngine = detectTemplateLanguage(originalPrompt);
+	if (templateEngine) {
+		userContent += `**Note:** Prompt mentions template engine: ${templateEngine}. Check for XSS prevention guidance.\n`;
+	}
+
   if (context.conventions && context.conventions.length > 0) {
     userContent += `\n**Security-relevant conventions (from CLAUDE.md):**\n${context.conventions.filter(c => {
       const lower = c.toLowerCase();
@@ -131,5 +187,8 @@ module.exports = {
   conditional: false,
   triggers: {},
   UNSAFE_OPERATIONS_SEVERITY,
+  TEMPLATE_ENGINES,
+  detectTemplateLanguage,
+  checkTemplateOutputSafety,
   SYSTEM_PROMPT,
 };
