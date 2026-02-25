@@ -173,6 +173,7 @@ function computeReviewerEffectiveness(entries) {
       precision: Math.round(precision * 10000) / 10000,
       proposed: data.proposed,
       accepted: data.accepted,
+      rejected: data.rejected,
       review_count: reviewCount,
     };
   }

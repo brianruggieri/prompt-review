@@ -70,12 +70,93 @@ Each phase agent should re-read referenced source files fresh before modifying �
 | File | Role |
 |------|------|
 | `index.cjs` | Entry point: hook/skill handlers, `runFullPipeline`, `logAudit`, `updateOutcome` |
-| `cost.cjs` | Audit logging: `writeAuditLog`, `updateAuditOutcome`, `estimateCost` |
-| `stats.cjs` | Analytics: `generateStats`, `renderDashboard`, `computeTopPatterns` |
+| `cost.cjs` | Audit logging: `writeAuditLog`, `updateAuditOutcome`, `estimateCost`, `verifyAuditEntry` |
+| `stats.cjs` | Analytics: `generateStats`, `renderDashboard`, `computeTopPatterns`, `computeReviewerEffectiveness` |
 | `editor.cjs` | Merge: `mergeCritiques`, `computeCompositeScore`, `extractOps` |
 | `orchestrator.cjs` | Fan-out: `determineActiveReviewers`, `runReviewersApi` |
 | `config.json` | Configuration — must stay valid JSON |
 | `tests/run.cjs` | Test runner — must pass before each phase completion |
+
+## Scoring System Reference
+
+### Composite Score Formula
+
+The composite score represents the weighted average of individual reviewer scores:
+
+```
+composite = Σ(score_i × weight_i) / Σ(weight_i)
+```
+
+Where:
+- `score_i` is the 0–10 score from reviewer role `i`
+- `weight_i` is the effectiveness weight for role `i` (see below)
+- Result is rounded to 2 decimal places
+
+**Example:** If security scores 8.0 (weight 1.2) and clarity scores 6.5 (weight 1.0):
+```
+composite = (8.0 × 1.2 + 6.5 × 1.0) / (1.2 + 1.0) = 16.1 / 2.2 = 7.32
+```
+
+### Weight Range & Default Values
+
+- **Minimum weight:** 0.5 (low-precision reviewer, rarely accepted findings)
+- **Default weight:** 1.0 (baseline, unchanged reviewer)
+- **Maximum weight:** 3.0 (high-precision reviewer, frequently accepted findings)
+
+Weights are automatically suggested by Phase 2 (GEA Reflection) based on reviewer precision:
+```bash
+node adapt.cjs 30              # Preview weight suggestions for last 30 days
+node adapt.cjs 30 --apply      # Apply suggestions and update config.json
+```
+
+### Precision Metric
+
+Precision = `accepted findings / proposed findings` for each reviewer.
+
+**Limitations:**
+- Does NOT measure recall — a reviewer with 1 proposal always accepted has precision 1.0 but may miss many real issues
+- Does NOT account for finding importance — all proposals weighted equally in precision calculation
+- Does NOT use finding confidence score (available in data but unused in current merge logic)
+
+To detect "plays it safe" reviewers (high precision, low coverage), use:
+```bash
+node adapt.cjs 30 --history    # Shows post-adaptation impact (Tier 2 feature)
+```
+
+### Audit Log Integrity
+
+Each entry in `logs/YYYY-MM-DD.jsonl` has a `__hash` field:
+
+```json
+{
+  "timestamp": "2026-02-25T14:30:45.123Z",
+  "original_prompt_hash": "a1b2c3d4",
+  "composite_score": 7.5,
+  "__hash": "sha256_first_16_chars",
+  ...
+}
+```
+
+The `__hash` is computed as SHA256(entry without __hash field).
+
+**Verification:** When loading logs, entries with invalid hashes are skipped. Use:
+```bash
+node -e "const {generateReflectionReport} = require('./reflection.cjs');
+  const report = generateReflectionReport(30);
+  console.log('Skipped:', report.skipped_entries,
+              'Valid:', report.total_reviews);"
+```
+
+### Score Validation
+
+To verify composite scores correlate with user acceptance patterns:
+
+```bash
+# See test in tests/scoring-accuracy.test.cjs
+npm test -- scoring-accuracy    # Runs correlation tests
+```
+
+Expected: High composite (≥7) should correlate with "approved" outcomes; low composite (<4) with "rejected".
 
 ## Git Workflow
 

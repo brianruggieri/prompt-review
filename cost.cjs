@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PRICING = {
   'claude-haiku-4-5':   { input: 1.0,  output: 5.0 },  // per MTok
@@ -12,10 +13,36 @@ function estimateCost(model, inputTokens, outputTokens) {
   return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
 }
 
+function computeEntryHash(entry) {
+  // Exclude __hash from hash computation
+  const contentCopy = { ...entry };
+  delete contentCopy.__hash;
+  const jsonStr = JSON.stringify(contentCopy);
+  return crypto.createHash('sha256').update(jsonStr).digest('hex').slice(0, 16);
+}
+
+function verifyAuditEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return { valid: false, reason: 'Entry is not an object' };
+  }
+  if (!entry.__hash) {
+    return { valid: false, reason: 'Entry has no __hash field' };
+  }
+  const computed = computeEntryHash(entry);
+  if (computed !== entry.__hash) {
+    return { valid: false, reason: `Hash mismatch: expected ${entry.__hash}, computed ${computed}` };
+  }
+  return { valid: true, reason: 'OK' };
+}
+
 function writeAuditLog(entry) {
   const logsDir = path.join(__dirname, 'logs');
   try {
     if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+    // Compute and attach hash before writing
+    entry.__hash = computeEntryHash(entry);
+
     const date = new Date().toISOString().slice(0, 10);
     const logFile = path.join(logsDir, `${date}.jsonl`);
     fs.appendFileSync(logFile, JSON.stringify(entry) + '\n');
@@ -60,10 +87,19 @@ function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedI
     try {
       const entry = JSON.parse(line);
       if (entry.original_prompt_hash === promptHash && entry.outcome === 'pending') {
+        // Verify hash before proceeding
+        const verification = verifyAuditEntry(entry);
+        if (!verification.valid) {
+          // Hash verification failed, skip this entry
+          return line;
+        }
+
         entry.outcome = outcome;
         entry.suggestions_accepted = acceptedIds || [];
         entry.suggestions_rejected = rejectedIds || [];
         entry.reviewer_stats = computeReviewerStats(entry.findings_detail || [], acceptedIds, rejectedIds);
+        // Compute new hash for mutated entry
+        entry.__hash = computeEntryHash(entry);
         updated = true;
         return JSON.stringify(entry);
       }
@@ -79,4 +115,4 @@ function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedI
   return updated;
 }
 
-module.exports = { estimateCost, writeAuditLog, updateAuditOutcome, computeReviewerStats, PRICING };
+module.exports = { estimateCost, writeAuditLog, updateAuditOutcome, computeReviewerStats, computeEntryHash, verifyAuditEntry, PRICING };

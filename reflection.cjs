@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const { verifyAuditEntry } = require('./cost.cjs');
 
 const LOGS_DIR = path.join(__dirname, 'logs');
 
 function loadLogsFromDisk(days) {
 	const entries = [];
-	if (!fs.existsSync(LOGS_DIR)) return entries;
+	let skipped = 0;
+	if (!fs.existsSync(LOGS_DIR)) return { entries, skipped };
 
 	const cutoff = days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : null;
 	const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl')).sort();
@@ -24,6 +26,16 @@ function loadLogsFromDisk(days) {
 			try {
 				const entry = JSON.parse(line.trim());
 				if (cutoff && new Date(entry.timestamp) < cutoff) continue;
+
+				// Verify hash if present
+				if (entry.__hash) {
+					const verification = verifyAuditEntry(entry);
+					if (!verification.valid) {
+						skipped++;
+						continue;
+					}
+				}
+
 				entries.push(entry);
 			} catch (e) {
 				// skip malformed lines
@@ -31,12 +43,18 @@ function loadLogsFromDisk(days) {
 		}
 	}
 
-	return entries;
+	return { entries, skipped };
 }
 
 function generateReflectionReport(days, options = {}) {
 	options = options || {};
-	const entries = options.entries !== undefined ? options.entries : loadLogsFromDisk(days);
+	let entries = options.entries;
+	let skipped = 0;
+	if (entries === undefined) {
+		const loaded = loadLogsFromDisk(days);
+		entries = loaded.entries;
+		skipped = loaded.skipped;
+	}
 	const minReviews = options.min_reviews || 5;
 	const precisionThreshold = options.precision_threshold || 0.70;
 
@@ -51,6 +69,8 @@ function generateReflectionReport(days, options = {}) {
 			high_precision_roles: [],
 			weight_suggestions: {},
 			sufficient_data: false,
+			skipped_entries: skipped,
+			hash_verification_failed: skipped > 0,
 		};
 	}
 
@@ -159,6 +179,8 @@ function generateReflectionReport(days, options = {}) {
 		high_precision_roles: highPrecisionRoles.sort(),
 		weight_suggestions: hasSufficientData ? computeWeightSuggestions(reviewers, {}, minReviews) : {},
 		sufficient_data: hasSufficientData,
+		skipped_entries: skipped,
+		hash_verification_failed: skipped > 0,
 	};
 }
 

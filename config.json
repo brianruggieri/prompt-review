@@ -145,8 +145,12 @@
   "clarity_gate": {
     "enabled": true,
     "strict_mode": false,
-    "reject_on": ["blocker"],
-    "warn_on": ["major"],
+    "reject_on": [
+      "blocker"
+    ],
+    "warn_on": [
+      "major"
+    ],
     "auto_refine": true,
     "show_reasoning": true
   }
