@@ -143,6 +143,11 @@
     "min_conflicts_to_trigger": 1
   },
   "clarity_gate": {
-    "enabled": true
+    "enabled": true,
+    "strict_mode": false,
+    "reject_on": ["blocker"],
+    "warn_on": ["major"],
+    "auto_refine": true,
+    "show_reasoning": true
   }
 }
