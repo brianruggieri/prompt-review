@@ -1,27 +1,45 @@
 // Feeds anonymous prompt hashes through orchestrator
 // Returns findings without original text
 
+const fs = require('fs');
+const path = require('path');
+const { runFullPipeline } = require('../index.cjs');
+
 async function runSinglePrompt(hash) {
 	try {
 		// Reconstruct a synthetic but realistic prompt based on hash
 		// (we never have the original, but orchestrator still processes it)
-		const synthesizedPrompt = `Prompt ${hash.slice(0, 8)}: Validation test prompt for real-world analysis`;
+		const synthesizedPrompt = `${hash}: Technical validation prompt for real-world analysis`;
 
-		// Placeholder: In real execution, this would call runFullPipeline
-		// For now, return a mock result structure
+		// Run through actual orchestrator pipeline
+		const result = await runFullPipeline(
+			synthesizedPrompt,
+			process.cwd(),
+			'api',  // API mode for real execution
+			null,   // no custom client
+			null    // default config
+		);
+
+		// Extract composite score and findings from result
+		const compositeScore = result.compositeScore || 0;
+		const findings = result.findings || [];
+		const improvementsActive = result.improvementsActive || {};
+
 		return {
 			hash,
-			compositeScore: 0,
-			findings: [],
-			improvementsActive: {},
-			error: 'orchestrator integration pending'
+			compositeScore,
+			findings,
+			improvementsActive,
+			error: null
 		};
 	} catch (e) {
+		// Handle API unavailable or other errors gracefully
 		return {
 			hash,
 			error: e.message,
-			compositeScore: null,
-			findings: []
+			compositeScore: 0,
+			findings: [],
+			improvementsActive: {}
 		};
 	}
 }
