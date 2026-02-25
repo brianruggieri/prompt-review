@@ -74,7 +74,7 @@ function computeReviewerStats(findingsDetail, acceptedIds, rejectedIds) {
   return stats;
 }
 
-function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedIds) {
+function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedIds, rejectionReasons = {}) {
   const logFile = path.join(__dirname, 'logs', `${logDate}.jsonl`);
   if (!fs.existsSync(logFile)) return false;
 
@@ -97,6 +97,18 @@ function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedI
         entry.outcome = outcome;
         entry.suggestions_accepted = acceptedIds || [];
         entry.suggestions_rejected = rejectedIds || [];
+        entry.rejection_details = {};
+
+        // Store rejection reasons if provided
+        if (rejectionReasons && Object.keys(rejectionReasons).length > 0) {
+          entry.rejection_details = rejectionReasons;
+        } else {
+          // Default: mark all rejections as 'unknown' reason
+          for (const rejectedId of (rejectedIds || [])) {
+            entry.rejection_details[rejectedId] = 'unknown';
+          }
+        }
+
         entry.reviewer_stats = computeReviewerStats(entry.findings_detail || [], acceptedIds, rejectedIds);
         // Compute new hash for mutated entry
         entry.__hash = computeEntryHash(entry);

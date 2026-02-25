@@ -133,9 +133,13 @@ function computeTopPatterns(entries) {
 
 function computeReviewerEffectiveness(entries) {
   const reviewerMap = {};
+  const totalReviews = entries.length;
 
   for (const entry of entries) {
     if (!entry.findings_detail || !Array.isArray(entry.findings_detail)) continue;
+
+    // Track which roles had accepted findings in this review
+    const rolesWithAccepted = new Set();
 
     for (const finding of entry.findings_detail) {
       const role = finding.reviewer_role;
@@ -147,6 +151,7 @@ function computeReviewerEffectiveness(entries) {
           accepted: 0,
           rejected: 0,
           review_count: 0,
+          reviews_with_accepted: new Set(), // reviews where role found at least 1 accepted
           participations: new Set(),
         };
       }
@@ -157,9 +162,15 @@ function computeReviewerEffectiveness(entries) {
 
       if (entry.suggestions_accepted && entry.suggestions_accepted.includes(findingId)) {
         reviewerMap[role].accepted++;
+        rolesWithAccepted.add(role);
       } else if (entry.suggestions_rejected && entry.suggestions_rejected.includes(findingId)) {
         reviewerMap[role].rejected++;
       }
+    }
+
+    // Mark reviews where roles found accepted findings
+    for (const role of rolesWithAccepted) {
+      reviewerMap[role].reviews_with_accepted.add(entry.timestamp);
     }
   }
 
@@ -168,12 +179,14 @@ function computeReviewerEffectiveness(entries) {
   for (const [role, data] of Object.entries(reviewerMap)) {
     const reviewCount = data.participations.size;
     const precision = data.proposed > 0 ? data.accepted / data.proposed : 0;
+    const coverageRatio = totalReviews > 0 ? data.reviews_with_accepted.size / totalReviews : 0;
 
     result[role] = {
       precision: Math.round(precision * 10000) / 10000,
       proposed: data.proposed,
       accepted: data.accepted,
       rejected: data.rejected,
+      coverage_ratio: Math.round(coverageRatio * 10000) / 10000,
       review_count: reviewCount,
     };
   }

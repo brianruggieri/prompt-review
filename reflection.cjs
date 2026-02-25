@@ -98,6 +98,10 @@ function generateReflectionReport(days, options = {}) {
 					proposed: 0,
 					accepted: 0,
 					rejected: 0,
+					invalid_rejected: 0,      // rejected because finding was wrong
+					deferred_rejected: 0,     // rejected but valid (deferred/out of scope)
+					conflict_rejected: 0,     // rejected due to conflict
+					unknown_rejected: 0,      // rejection reason not specified
 					review_count: 0,
 					reviews_with_effect: new Set(), // track unique reviews where role had accepted + good outcome
 					participations: new Set(), // track unique reviews for review_count
@@ -119,6 +123,18 @@ function generateReflectionReport(days, options = {}) {
 			} else if (entry.suggestions_rejected && entry.suggestions_rejected.includes(findingId)) {
 				reviewerMap[role].rejected++;
 				isRejected = true;
+
+				// Track rejection reason if available
+				if (entry.rejection_details && entry.rejection_details[findingId]) {
+					const reason = entry.rejection_details[findingId];
+					if (reason === 'invalid') reviewerMap[role].invalid_rejected++;
+					else if (reason === 'deferred') reviewerMap[role].deferred_rejected++;
+					else if (reason === 'conflict') reviewerMap[role].conflict_rejected++;
+					else reviewerMap[role].unknown_rejected++;
+				} else {
+					// Legacy entries without rejection_details
+					reviewerMap[role].unknown_rejected++;
+				}
 			}
 		}
 
@@ -138,14 +154,19 @@ function generateReflectionReport(days, options = {}) {
 	for (const [role, data] of Object.entries(reviewerMap)) {
 		const reviewCount = data.participations.size;
 		const precision = data.proposed > 0 ? data.accepted / data.proposed : 0;
+		const precisionStrict = data.proposed > 0 ? data.accepted / (data.accepted + data.invalid_rejected) : 0;
+		const coverageRatio = entries.length > 0 ? data.participations.size / entries.length : 0;
 		const reviewsWithEffectCount = data.reviews_with_effect.size;
 		const outcomeCorrelation = reviewCount > 0 ? reviewsWithEffectCount / reviewCount : 0;
 
 		reviewers[role] = {
 			precision: Math.round(precision * 10000) / 10000, // 4 decimals
+			precision_strict: Math.round(precisionStrict * 10000) / 10000, // using only invalid rejections
+			coverage_ratio: Math.round(coverageRatio * 10000) / 10000, // in what % of reviews did this role contribute
 			proposed: data.proposed,
 			accepted: data.accepted,
 			rejected: data.rejected,
+			invalid_rejected: data.invalid_rejected,
 			review_count: reviewCount,
 			outcome_correlation: Math.round(outcomeCorrelation * 10000) / 10000,
 		};
@@ -157,12 +178,24 @@ function generateReflectionReport(days, options = {}) {
 	// Compute low/high precision roles
 	const lowPrecisionRoles = [];
 	const highPrecisionRoles = [];
+	const lowCoverageRoles = [];
+	const playsItSafeRoles = [];
+
+	const COVERAGE_THRESHOLD = 0.3;
 
 	for (const [role, metrics] of Object.entries(reviewers)) {
 		if (metrics.precision < precisionThreshold) {
 			lowPrecisionRoles.push(role);
 		} else if (metrics.precision >= precisionThreshold) {
 			highPrecisionRoles.push(role);
+		}
+
+		if (metrics.coverage_ratio < COVERAGE_THRESHOLD) {
+			lowCoverageRoles.push(role);
+			// Flag "plays it safe" - high precision but low coverage (risky pattern)
+			if (metrics.precision >= precisionThreshold) {
+				playsItSafeRoles.push(role);
+			}
 		}
 	}
 
@@ -177,6 +210,8 @@ function generateReflectionReport(days, options = {}) {
 		reviewers,
 		low_precision_roles: lowPrecisionRoles.sort(),
 		high_precision_roles: highPrecisionRoles.sort(),
+		low_coverage_roles: lowCoverageRoles.sort(),
+		plays_it_safe_roles: playsItSafeRoles.sort(),
 		weight_suggestions: hasSufficientData ? computeWeightSuggestions(reviewers, {}, minReviews) : {},
 		sufficient_data: hasSufficientData,
 		skipped_entries: skipped,
