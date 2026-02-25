@@ -11,11 +11,12 @@ async function runSinglePrompt(hash) {
 		// (we never have the original, but orchestrator still processes it)
 		const synthesizedPrompt = `${hash}: Technical validation prompt for real-world analysis`;
 
-		// Run through actual orchestrator pipeline
+		// Run through actual orchestrator pipeline in subscription mode
+		// (Claude Code dispatch - included in your subscription, not per-API call)
 		const result = await runFullPipeline(
 			synthesizedPrompt,
 			process.cwd(),
-			'api',  // API mode for real execution
+			'subscription',  // Subscription mode: dispatch via Claude Code (free)
 			null,   // no custom client
 			null    // default config
 		);
@@ -33,7 +34,7 @@ async function runSinglePrompt(hash) {
 			error: null
 		};
 	} catch (e) {
-		// Handle API unavailable or other errors gracefully
+		// Handle dispatch or other errors gracefully
 		return {
 			hash,
 			error: e.message,
