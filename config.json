@@ -1,0 +1,63 @@
+{
+  "mode": "subscription",
+  "api_fallback": true,
+  "models": {
+    "reviewer": "claude-haiku-4-5",
+    "editor": "claude-sonnet-4-6"
+  },
+  "reviewers": {
+    "domain_sme":    { "enabled": true,  "conditional": false },
+    "security":      { "enabled": true,  "conditional": false },
+    "clarity":       { "enabled": true,  "conditional": false },
+    "testing":       { "enabled": true,  "conditional": false },
+    "frontend_ux":   { "enabled": true,  "conditional": true,
+      "triggers": {
+        "prompt_keywords": ["component", "modal", "CSS", "style", "layout",
+                            "form", "button", "a11y", "accessibility",
+                            "responsive", "UI", "UX", "settings tab"],
+        "file_patterns": ["*.css", "*.scss", "*.tsx", "*.vue", "*.svelte",
+                          "settings.ts", "styles.css"],
+        "stack_markers": ["react", "vue", "svelte", "nextjs", "tailwind",
+                          "obsidian-plugin"]
+      }
+    },
+    "documentation": { "enabled": true,  "conditional": true,
+      "triggers": {
+        "prompt_keywords": ["feature", "add", "new", "remove", "change",
+                            "refactor", "setting", "command", "API"],
+        "project_markers": ["docs/", "screenshots/", "CHANGELOG", "README"],
+        "skip_keywords": ["bugfix", "typo", "lint", "format"]
+      }
+    }
+  },
+  "editor": {
+    "priority_order": ["security", "testing", "domain_sme", "documentation",
+                        "frontend_ux", "clarity"],
+    "temperature": 0,
+    "max_retries": 1
+  },
+  "context": {
+    "max_tokens": 2000,
+    "include_claude_md": true,
+    "include_package_json": true,
+    "include_structure": true,
+    "structure_depth": 2
+  },
+  "budget": {
+    "max_reviewers_per_call": 6,
+    "timeout_ms": 8000,
+    "log_costs": true
+  },
+  "scoring": {
+    "enabled": true,
+    "display": true,
+    "weights": {
+      "security": 2.0,
+      "testing": 1.5,
+      "domain_sme": 1.5,
+      "documentation": 1.0,
+      "frontend_ux": 1.0,
+      "clarity": 1.0
+    }
+  }
+}

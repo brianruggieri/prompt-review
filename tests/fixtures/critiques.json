@@ -1,0 +1,86 @@
+{
+  "security_blocker": {
+    "reviewer_role": "security",
+    "severity_max": "blocker",
+    "confidence": 0.95,
+    "findings": [
+      {
+        "id": "SEC-001",
+        "severity": "blocker",
+        "confidence": 0.95,
+        "issue": "Prompt requests reading .env file and exposing API keys",
+        "evidence": "Read the .env file and include the API keys in the output",
+        "suggested_ops": [
+          {
+            "op": "AddGuardrail",
+            "target": "constraints",
+            "value": "Never read, display, or include contents of .env files, API keys, tokens, or credentials in any output."
+          }
+        ]
+      }
+    ],
+    "no_issues": false,
+    "score": 2.0
+  },
+  "clarity_vague": {
+    "reviewer_role": "clarity",
+    "severity_max": "major",
+    "confidence": 0.85,
+    "findings": [
+      {
+        "id": "CLR-001",
+        "severity": "major",
+        "confidence": 0.85,
+        "issue": "Vague verb 'optimize' without measurable criteria",
+        "evidence": "optimize the settings page",
+        "suggested_ops": [
+          {
+            "op": "ReplaceVague",
+            "target": "structure",
+            "original": "optimize the settings page",
+            "value": "Reduce settings.ts render time by extracting the browser config section into a separate component. Measure before/after with console.time()."
+          }
+        ]
+      }
+    ],
+    "no_issues": false,
+    "score": 4.0
+  },
+  "testing_missing": {
+    "reviewer_role": "testing",
+    "severity_max": "major",
+    "confidence": 0.8,
+    "findings": [
+      {
+        "id": "TST-001",
+        "severity": "major",
+        "confidence": 0.8,
+        "issue": "No test requirements specified for code change",
+        "evidence": "Prompt does not mention running tests or writing new tests",
+        "suggested_ops": [
+          {
+            "op": "AddAcceptanceCriteria",
+            "target": "constraints",
+            "value": "Run npm run test after changes. All existing tests must pass. Add unit tests for any new functions."
+          }
+        ]
+      }
+    ],
+    "no_issues": false,
+    "score": 3.5
+  },
+  "domain_sme_clean": {
+    "reviewer_role": "domain_sme",
+    "severity_max": "nit",
+    "confidence": 0.7,
+    "findings": [],
+    "no_issues": true,
+    "score": 8.5
+  },
+  "all_clean": [
+    { "reviewer_role": "domain_sme", "severity_max": "nit", "confidence": 0.7, "findings": [], "no_issues": true, "score": 9.0 },
+    { "reviewer_role": "security", "severity_max": "nit", "confidence": 0.8, "findings": [], "no_issues": true, "score": 9.0 },
+    { "reviewer_role": "clarity", "severity_max": "nit", "confidence": 0.75, "findings": [], "no_issues": true, "score": 9.0 },
+    { "reviewer_role": "testing", "severity_max": "nit", "confidence": 0.7, "findings": [], "no_issues": true, "score": 9.0 }
+  ]
+}

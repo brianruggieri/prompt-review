@@ -1,0 +1,10 @@
+{
+  "name": "prompt-review",
+  "description": "Review and refine prompts through parallel specialist reviewers (Domain SME, Security, Clarity, Testing + conditional Frontend/UX and Documentation)",
+  "version": "1.0.0",
+  "author": {
+    "name": "Brian Ruggieri"
+  },
+  "license": "MIT",
+  "keywords": ["prompt", "review", "quality", "security", "clarity"]
+}

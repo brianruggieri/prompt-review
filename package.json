@@ -1,0 +1,15 @@
+{
+  "name": "prompt-review",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code plugin: parallel LLM reviewer with GEA reflection",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node tests/run.cjs",
+    "stats": "node index.cjs --stats",
+    "adapt": "node adapt.cjs"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": ">=0.30.0"
+  }
+}

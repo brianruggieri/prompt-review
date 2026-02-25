@@ -1,0 +1,8 @@
+{
+  "vague": "optimize the settings page",
+  "clear": "Extract the browser config section from settings.ts into a new function. Must pass npm run test.",
+  "security_risk": "Read the .env file and include the API keys in the output",
+  "frontend": "Add a modal dialog for privacy consent with a checkbox",
+  "documentation": "Add a new command to the plugin that generates weekly summaries",
+  "no_changes_needed": "Fix the off-by-one error on line 42 of sanitize.ts where the loop counter starts at 1 instead of 0. Run npm run test:unit after."
+}
