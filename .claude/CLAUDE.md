@@ -8,7 +8,7 @@
 2. **Phase 2: GEA Reflection** — Analyzes acceptance patterns and adapts reviewer weights automatically
 3. **Phase 3: CoMAS Debate** — Resolves conflicts through debate and extracts policy signals to improve reviewer prompts
 
-**Status:** ✅ All 3 phases complete, 12/12 tests passing, publicly released
+**Status:** ✅ All 3 phases complete, 17/17 tests passing, scoring validation complete, publicly released
 
 ## Architecture
 
@@ -187,7 +187,7 @@ source ~/.nvm/nvm.sh && nvm use
 
 # 3. Verify everything works
 npm test
-# Expected: 12 passed, 0 failed, 12 total
+# Expected: 17 passed, 0 failed, 17 total
 
 # 4. See what's new
 git log --oneline -5
@@ -203,7 +203,7 @@ git status
 | Aspect | Status |
 |--------|--------|
 | **Implementation** | ✅ Complete (3 phases) |
-| **Tests** | ✅ 12/12 passing |
+| **Tests** | ✅ 17/17 passing |
 | **Documentation** | ✅ README + ARCHITECTURE + Phase Specs |
 | **Public Release** | ✅ Live on GitHub |
 | **Code Quality** | ✅ Zero dependencies (core), all CommonJS |

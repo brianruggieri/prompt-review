@@ -6,7 +6,7 @@ Automatically review your prompts for clarity, security, testing completeness, a
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen)](./tests/)
+[![Tests](https://img.shields.io/badge/tests-17%2F17%20passing-brightgreen)](./tests/)
 [![Claude SDK](https://img.shields.io/badge/Claude-SDK%20%3E%3D0.30.0-blueviolet)](https://github.com/anthropics/anthropic-sdk-python)
 
 ---
