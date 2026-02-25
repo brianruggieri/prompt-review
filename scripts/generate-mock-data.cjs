@@ -633,16 +633,27 @@ const TIER_1_SCENARIOS = {
 	],
 };
 
+// Helper: Compute entry hash (must match cost.cjs computeEntryHash)
+function computeEntryHash(entry) {
+	const crypto = require('crypto');
+	const contentCopy = { ...entry };
+	delete contentCopy.__hash;
+	const jsonStr = JSON.stringify(contentCopy);
+	return crypto.createHash('sha256').update(jsonStr).digest('hex').slice(0, 16);
+}
+
 // Helper: Generate an audit log entry from a scenario
 function generateAuditEntry(scenario, timestamp = null) {
 	const ts = timestamp || new Date().toISOString();
-	const hash = require('crypto').createHash('sha256');
-	hash.update(scenario.id + scenario.clarity_score + ts);
-	const entry_hash = hash.digest('hex').slice(0, 16);
+	const crypto = require('crypto');
 
-	return {
+	// Generate a unique prompt hash for this scenario
+	const promptHashInput = scenario.id + JSON.stringify(scenario.findings);
+	const promptHash = crypto.createHash('sha256').update(promptHashInput).digest('hex').slice(0, 12);
+
+	const entry = {
 		timestamp: ts,
-		original_prompt_hash: entry_hash,
+		original_prompt_hash: promptHash,
 		reviewers_active: ['clarity', 'domain_sme', 'testing', 'security', 'frontend_ux'],
 		findings_detail: scenario.findings,
 		composite_score: scenario.clarity_score,
@@ -657,8 +668,12 @@ function generateAuditEntry(scenario, timestamp = null) {
 		},
 		outcome: 'pending',
 		rejection_details: {},
-		__hash: entry_hash,
 	};
+
+	// Compute and attach hash (must be last step, same as cost.cjs)
+	entry.__hash = computeEntryHash(entry);
+
+	return entry;
 }
 
 // Generate all Tier 1 data
