@@ -29,13 +29,25 @@ const assert = require('assert');
 {
 	const documentation = require('../reviewers/documentation.cjs');
 
-	// Test: Infers MVP maturity
-	const mvpMaturity = documentation.inferProjectMaturity({ stack: [], projectAge: 'new' });
+	// Test: Infers MVP maturity for new projects
+	const mvpMaturity = documentation.inferProjectMaturity({ projectAge: 'new' });
 	assert.strictEqual(mvpMaturity, 'MVP', 'Should infer MVP for new projects');
 
-	// Test: Infers stable maturity
-	const stableMaturity = documentation.inferProjectMaturity({ stats: { files: 600 }, projectAge: 'established' });
-	assert.strictEqual(stableMaturity, 'stable', 'Should infer stable for large projects');
+	// Test: Infers MVP for very small projects (<50 files)
+	const mvpSmall = documentation.inferProjectMaturity({ stats: { files: 30 } });
+	assert.strictEqual(mvpSmall, 'MVP', 'Should infer MVP for <50 file projects');
+
+	// Test: Infers growing for medium projects (50-300 files)
+	const growingMaturity = documentation.inferProjectMaturity({ stats: { files: 150 } });
+	assert.strictEqual(growingMaturity, 'growing', 'Should infer growing for 50-300 file projects');
+
+	// Test: Infers stable maturity from large projects (300+ files)
+	const stableMaturity = documentation.inferProjectMaturity({ stats: { files: 400 } });
+	assert.strictEqual(stableMaturity, 'stable', 'Should infer stable for 300+ file projects');
+
+	// Test: Infers stable from established age
+	const stableByAge = documentation.inferProjectMaturity({ projectAge: 'established' });
+	assert.strictEqual(stableByAge, 'stable', 'Should infer stable for established projects');
 
 	// Test: MVP doesn't require CHANGELOG for bugfixes
 	const mvpExpectations = documentation.buildDocumentationExpectations('MVP', 'Fix crash in login');
