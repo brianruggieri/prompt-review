@@ -59,6 +59,7 @@ if (require.main === module) {
 	const tier = args.includes('--tier') ? args[args.indexOf('--tier') + 1] : '1';
 	const count = args.includes('--count') ? parseInt(args[args.indexOf('--count') + 1]) : null;
 	const outputDir = args.includes('--output') ? args[args.indexOf('--output') + 1] : null;
+	const expanded = args.includes('--expanded');
 
 	let entries;
 
@@ -66,10 +67,16 @@ if (require.main === module) {
 		const { entries: tierEntries } = require('./generate-mock-data.cjs').generateTier1();
 		entries = count ? tierEntries.slice(0, count) : tierEntries;
 	} else if (tier === '2') {
-		const { entries: tierEntries } = require('./generate-mock-data.cjs').generateTier2();
-		entries = count ? tierEntries.slice(0, count) : tierEntries;
+		if (expanded) {
+			const { expandTier2 } = require('./expand-tier2.cjs');
+			const { entries: tierEntries } = expandTier2(count || 162);
+			entries = tierEntries;
+		} else {
+			const { entries: tierEntries } = require('./generate-mock-data.cjs').generateTier2();
+			entries = count ? tierEntries.slice(0, count) : tierEntries;
+		}
 	} else {
-		console.error(`Unknown tier: ${tier}. Currently supporting --tier 1|2`);
+		console.error(`Unknown tier: ${tier}. Currently supporting --tier 1|2 [--expanded]`);
 		process.exit(1);
 	}
 
