@@ -274,8 +274,94 @@ function computeWeightSuggestions(reviewerMetrics, currentWeights, minReviews) {
 	return suggestions;
 }
 
+function computeAdaptationImpact(days) {
+	const logsDir = path.join(__dirname, 'logs');
+	const weightHistoryFile = path.join(logsDir, 'weight-history.jsonl');
+
+	if (!fs.existsSync(weightHistoryFile)) {
+		return { impacts: [], message: 'No weight changes recorded yet' };
+	}
+
+	const content = fs.readFileSync(weightHistoryFile, 'utf-8');
+	const lines = content.split('\n').filter(l => l.trim());
+	const impacts = [];
+
+	for (const line of lines) {
+		try {
+			const entry = JSON.parse(line.trim());
+
+			// Compute impact for each role
+			const changeTime = new Date(entry.timestamp);
+			const impactData = {
+				timestamp: entry.timestamp,
+				change_date: entry.timestamp.slice(0, 10),
+				period_days: entry.measurement_period_days,
+				impact_by_role: {},
+			};
+
+			for (const [role, before] of Object.entries(entry.weights_before)) {
+				const after = entry.weights_after[role] || before;
+				const precisionAtChange = entry.precision_at_change[role];
+				const delta = after - before;
+
+				impactData.impact_by_role[role] = {
+					weight_before: before,
+					weight_after: after,
+					weight_delta: Math.round(delta * 100) / 100,
+					precision_at_change: precisionAtChange ? precisionAtChange.precision : null,
+					precision_strict: precisionAtChange ? precisionAtChange.precision_strict : null,
+					coverage_ratio: precisionAtChange ? precisionAtChange.coverage_ratio : null,
+				};
+			}
+
+			impacts.push(impactData);
+		} catch (e) {
+			// Skip malformed lines
+		}
+	}
+
+	return { impacts, count: impacts.length };
+}
+
+function renderAdaptationHistoryTable(impactData) {
+	if (!impactData.impacts || impactData.impacts.length === 0) {
+		return 'No adaptation history available';
+	}
+
+	const lines = [];
+	lines.push('Weight Adaptation History');
+	lines.push('========================\n');
+
+	for (const impact of impactData.impacts) {
+		lines.push(`Change Date: ${impact.change_date} (measurement period: ${impact.period_days}d)`);
+		lines.push('');
+
+		// Table header
+		lines.push('Role            Before  After   Delta  Precision  Coverage');
+		lines.push('---           ------  -----   -----  ---------  --------');
+
+		// Table rows
+		for (const [role, data] of Object.entries(impact.impact_by_role)) {
+			const roleLabel = role.padEnd(15);
+			const before = String(data.weight_before).padStart(6);
+			const after = String(data.weight_after).padStart(5);
+			const delta = String(data.weight_delta >= 0 ? '+' + data.weight_delta : data.weight_delta).padStart(5);
+			const precision = data.precision_at_change !== null ? (data.precision_at_change * 100).toFixed(0) + '%' : 'N/A';
+			const coverage = data.coverage_ratio !== null ? (data.coverage_ratio * 100).toFixed(0) + '%' : 'N/A';
+
+			lines.push(`${roleLabel}${before}  ${after}   ${delta}  ${String(precision).padStart(8)}  ${String(coverage).padStart(7)}`);
+		}
+
+		lines.push('');
+	}
+
+	return lines.join('\n');
+}
+
 module.exports = {
 	generateReflectionReport,
 	computeWeightSuggestions,
 	loadLogsFromDisk,
+	computeAdaptationImpact,
+	renderAdaptationHistoryTable,
 };

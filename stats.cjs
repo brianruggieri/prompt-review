@@ -321,9 +321,71 @@ function renderDashboardJson(stats) {
   return JSON.stringify(stats, null, 2);
 }
 
+function computeContributionShare(entries, weights) {
+  weights = weights || {};
+  const shares = {};
+  let totalContribution = 0;
+
+  // For each entry, compute each role's contribution to composite score
+  const roleContributions = {};
+  let entryCount = 0;
+
+  for (const entry of entries) {
+    if (!entry.scores || entry.composite_score === null) continue;
+    entryCount++;
+
+    const denominatorSum = Object.keys(entry.scores).reduce((sum, role) => {
+      const weight = weights[role] || 1.0;
+      return sum + weight;
+    }, 0);
+
+    if (denominatorSum === 0) continue;
+
+    for (const [role, score] of Object.entries(entry.scores)) {
+      const weight = weights[role] || 1.0;
+      const contribution = (score * weight) / denominatorSum;
+
+      if (!roleContributions[role]) {
+        roleContributions[role] = 0;
+      }
+      roleContributions[role] += contribution;
+    }
+  }
+
+  // Average contribution across entries
+  if (entryCount === 0) return shares;
+
+  const dominantRoles = [];
+  for (const [role, totalContrib] of Object.entries(roleContributions)) {
+    const avgShare = totalContrib / entryCount;
+    shares[role] = Math.round(avgShare * 10000) / 10000;
+    if (avgShare > 0.4) {
+      dominantRoles.push(role);
+    }
+  }
+
+  return { contribution_share: shares, dominant_roles: dominantRoles };
+}
+
 function generateStats(days) {
   const numDays = days === 'all' ? null : (parseInt(days) || 30);
   const entries = loadLogsFromDisk(numDays);
+
+  const effectiveness = computeReviewerEffectiveness(entries);
+
+  // Get weights from config for fairness analysis
+  let weights = {};
+  try {
+    const configPath = require('path').join(__dirname, 'config.json');
+    const config = JSON.parse(require('fs').readFileSync(configPath, 'utf-8'));
+    if (config.scoring && config.scoring.weights) {
+      weights = config.scoring.weights;
+    }
+  } catch (e) {
+    // Use default weights
+  }
+
+  const fairnessAnalysis = computeContributionShare(entries, weights);
 
   const stats = {
     period: days === 'all' ? 'all' : `${numDays}d`,
@@ -332,7 +394,9 @@ function generateStats(days) {
     subscores: computeSubscoreTrend(entries),
     severityTrend: computeSeverityTrend(entries),
     topPatterns: computeTopPatterns(entries),
-    effectiveness: computeReviewerEffectiveness(entries),
+    effectiveness: effectiveness,
+    contribution_share: fairnessAnalysis.contribution_share,
+    dominant_roles: fairnessAnalysis.dominant_roles,
   };
 
   return stats;
@@ -347,6 +411,7 @@ module.exports = {
   computeSeverityTrend,
   computeTopPatterns,
   computeReviewerEffectiveness,
+  computeContributionShare,
   renderDashboard,
   renderDashboardJson,
   generateStats,

@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { generateReflectionReport, computeWeightSuggestions } = require('./reflection.cjs');
+const { generateReflectionReport, computeWeightSuggestions, computeAdaptationImpact, renderAdaptationHistoryTable } = require('./reflection.cjs');
+
+const LOGS_DIR = path.join(__dirname, 'logs');
+const WEIGHT_HISTORY_FILE = path.join(LOGS_DIR, 'weight-history.jsonl');
 
 function previewAdaptation(days, options = {}) {
 	options = options || {};
@@ -123,6 +126,23 @@ function applyAdaptation(days, options = {}) {
 		};
 	}
 
+	// Write weight change event to weight-history.jsonl
+	try {
+		if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+
+		const weightChangeEntry = {
+			timestamp: new Date().toISOString(),
+			weights_before: historyEntry.weights,
+			weights_after: config.scoring.weights,
+			precision_at_change: preview.report.reviewers,
+			measurement_period_days: days,
+		};
+
+		fs.appendFileSync(WEIGHT_HISTORY_FILE, JSON.stringify(weightChangeEntry) + '\n');
+	} catch (e) {
+		// Fail silently; don't block if weight history write fails
+	}
+
 	return {
 		success: true,
 		diff: preview.diff,
@@ -135,8 +155,48 @@ if (require.main === module) {
 	const args = process.argv.slice(2);
 	const days = parseInt(args[0]) || 30;
 	const shouldApply = args.includes('--apply');
+	const showHistory = args.includes('--history');
+	const showBenchmark = args.includes('--benchmark');
 
-	if (shouldApply) {
+	if (showHistory) {
+		const { renderAdaptationHistoryTable } = require('./reflection.cjs');
+		const impact = computeAdaptationImpact(days);
+		console.log(renderAdaptationHistoryTable(impact));
+		process.exit(0);
+	} else if (showBenchmark) {
+		const result = previewAdaptation(days);
+		if (!result.sufficient_data) {
+			console.log('Insufficient data for benchmark (need >= 5 reviews with outcomes)');
+			process.exit(1);
+		}
+
+		console.log('Weight Adaptation Benchmark');
+		console.log('============================\n');
+		console.log('Comparing: Current Weights vs Equal Weights (all 1.0)\n');
+
+		// Compute impact of equal weights
+		const equalWeights = {};
+		const currentWeights = {};
+		for (const role of Object.keys(result.report.reviewers)) {
+			equalWeights[role] = 1.0;
+			currentWeights[role] = result.report.reviewers[role];
+		}
+
+		console.log('Role            Current  Equal   Precision  Coverage  Change');
+		console.log('---             -------  -----   ---------  --------  ------');
+
+		for (const [role, metrics] of Object.entries(result.report.reviewers)) {
+			const current = String(currentWeights[role] || 1.0).padStart(7);
+			const equal = String(equalWeights[role]).padStart(5);
+			const precision = String((metrics.precision * 100).toFixed(0) + '%').padStart(9);
+			const coverage = String((metrics.coverage_ratio * 100).toFixed(0) + '%').padStart(8);
+			const isBenefit = metrics.precision > 0.7 ? '↑ yes' : '— no';
+			console.log(`${role.padEnd(15)}${current}  ${equal}   ${precision}  ${coverage}  ${isBenefit}`);
+		}
+
+		console.log('\nInterpretation: "Change" indicates roles benefiting from current weighting strategy');
+		process.exit(0);
+	} else if (shouldApply) {
 		const result = applyAdaptation(days);
 		console.log('Weight Adaptation Applied');
 		console.log('========================\n');
