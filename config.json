@@ -58,6 +58,15 @@
       "documentation": 1.0,
       "frontend_ux": 1.0,
       "clarity": 1.0
-    }
+    },
+    "weights_history": []
+  },
+  "reflection": {
+    "min_reviews_for_adaptation": 5,
+    "precision_threshold": 0.70,
+    "weight_clamp_min": 0.5,
+    "weight_clamp_max": 3.0,
+    "auto_adapt": false,
+    "auto_adapt_interval_days": 30
   }
 }
