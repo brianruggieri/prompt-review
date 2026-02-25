@@ -9,6 +9,8 @@ const { validateCritique } = require('./schemas.cjs');
 const { renderReviewBlock } = require('./renderer.cjs');
 const { estimateCost, writeAuditLog } = require('./cost.cjs');
 const { generateStats, renderDashboard, renderDashboardJson } = require('./stats.cjs');
+const { selectDebatePairs, buildDebatePrompt, runDebatePhase } = require('./debate.cjs');
+const { runJudge } = require('./judge.cjs');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const FLAG_FILE = '/tmp/prompt-review-active';
@@ -268,6 +270,38 @@ async function runFullPipeline(prompt, options) {
       scoringResult = computeCompositeScore(validCritiques, config.scoring.weights);
     }
 
+    // Debate phase: run if enabled and conflicts exist
+    let debateResult = null;
+    let debateJudgeTokens = 0;
+    if (config.debate?.enabled && apiKey) {
+      const preCheck = mergeCritiques(validCritiques, config.editor?.priority_order || [
+        'security', 'testing', 'domain_sme', 'documentation', 'frontend_ux', 'clarity'
+      ]);
+      if (preCheck.conflicts.length > 0) {
+        const pairs = selectDebatePairs(preCheck.conflicts, preCheck.allOps, { max_pairs: config.debate.max_pairs || 2 });
+        if (pairs.length > 0) {
+          try {
+            const debateModel = config.debate?.model || 'claude-haiku-4-5';
+            debateResult = await runDebatePhase(pairs, validCritiques, prompt, context, new (require('@anthropic-ai/sdk'))({ apiKey }), debateModel);
+
+            // Run judge if we have debate results
+            if (debateResult && debateResult.results.length > 0) {
+              const judgeModel = config.debate?.judge_model || 'claude-sonnet-4-6';
+              const judgeResult = await runJudge(debateResult, new (require('@anthropic-ai/sdk'))({ apiKey }), judgeModel);
+              debateResult.judgeResult = judgeResult;
+              if (judgeResult.usage) {
+                debateJudgeTokens = (judgeResult.usage.input_tokens || 0) + (judgeResult.usage.output_tokens || 0);
+              }
+            }
+          } catch (error) {
+            // Log error but continue with normal merge — debate is optional
+            console.error('Debate phase error:', error.message);
+            debateResult = null;
+          }
+        }
+      }
+    }
+
     // Merge critiques
     const priorityOrder = config.editor?.priority_order || [
       'security', 'testing', 'domain_sme', 'documentation', 'frontend_ux', 'clarity'
@@ -280,7 +314,7 @@ async function runFullPipeline(prompt, options) {
       const totalOutput = results.reduce((sum, r) => sum + (r.usage?.output_tokens || 0), 0);
 
       logAudit(prompt, cwd, activeReviewers, [], 'nit', 0, config.mode, totalInput, totalOutput, durationMs,
-        scoringResult ? scoringResult.scores : {}, scoringResult ? scoringResult.composite : null);
+        scoringResult ? scoringResult.scores : {}, scoringResult ? scoringResult.composite : null, debateResult);
 
       return {
         noChanges: true,
@@ -326,11 +360,22 @@ async function runFullPipeline(prompt, options) {
     const parsed = parseEditorResponse(editorText);
     const durationMs = Date.now() - startTime;
 
-    // Calculate total costs
+    // Calculate total costs (including debate if ran)
+    let debateInputTokens = 0;
+    let debateOutputTokens = 0;
+    if (debateResult) {
+      debateInputTokens = debateResult.results.reduce((sum, r) => sum + (r.usage?.input_tokens || 0), 0) || 0;
+      debateOutputTokens = debateResult.results.reduce((sum, r) => sum + (r.usage?.output_tokens || 0), 0) || 0;
+    }
+
     const totalInput = results.reduce((sum, r) => sum + (r.usage?.input_tokens || 0), 0)
-      + (editorResponse.usage?.input_tokens || 0);
+      + (editorResponse.usage?.input_tokens || 0)
+      + debateInputTokens
+      + (debateResult?.judgeResult?.usage?.input_tokens || 0);
     const totalOutput = results.reduce((sum, r) => sum + (r.usage?.output_tokens || 0), 0)
-      + (editorResponse.usage?.output_tokens || 0);
+      + (editorResponse.usage?.output_tokens || 0)
+      + debateOutputTokens
+      + (debateResult?.judgeResult?.usage?.output_tokens || 0);
     const totalCostUsd = estimateCost(reviewerModel,
       results.reduce((sum, r) => sum + (r.usage?.input_tokens || 0), 0),
       results.reduce((sum, r) => sum + (r.usage?.output_tokens || 0), 0))
@@ -353,7 +398,7 @@ async function runFullPipeline(prompt, options) {
     });
 
     logAudit(prompt, cwd, activeReviewers, buildFindingsDetail(merged.allOps), merged.severityMax, merged.conflicts.length, config.mode, totalInput, totalOutput, durationMs,
-      scoringResult ? scoringResult.scores : {}, scoringResult ? scoringResult.composite : null);
+      scoringResult ? scoringResult.scores : {}, scoringResult ? scoringResult.composite : null, debateResult);
 
     return {
       block,
@@ -385,7 +430,35 @@ function buildFindingsDetail(allOps) {
   return findingsDetail;
 }
 
-function logAudit(prompt, cwd, reviewersActive, findingsDetail, severityMax, conflicts, mode, inputTokens, outputTokens, durationMs, scores, compositeScore) {
+function logAudit(prompt, cwd, reviewersActive, findingsDetail, severityMax, conflicts, mode, inputTokens, outputTokens, durationMs, scores, compositeScore, debateResult) {
+  // Build debate_log entry
+  let debate_log = null;
+  if (debateResult) {
+    const pairs = debateResult.results.map(r => ({
+      role_a: r.pair.role_a,
+      role_b: r.pair.role_b,
+      conflict: r.pair.conflict_description,
+      winner: r.pair.judge_feedback ? (r.pair.judge_feedback.winner || 'unknown') : 'unknown',
+      judge_scores: {},
+    }));
+
+    const debate_cost = {
+      input_tokens: debateResult.results.reduce((sum, r) => sum + (r.usage?.input_tokens || 0), 0) || 0,
+      output_tokens: debateResult.results.reduce((sum, r) => sum + (r.usage?.output_tokens || 0), 0) || 0,
+    };
+    if (debateResult.judgeResult?.usage) {
+      debate_cost.input_tokens += debateResult.judgeResult.usage.input_tokens || 0;
+      debate_cost.output_tokens += debateResult.judgeResult.usage.output_tokens || 0;
+    }
+
+    debate_log = {
+      ran: true,
+      pairs,
+      judge_feedback: debateResult.judgeResult?.feedback || [],
+      cost: debate_cost,
+    };
+  }
+
   writeAuditLog({
     timestamp: new Date().toISOString(),
     project: path.basename(cwd),
@@ -403,6 +476,7 @@ function logAudit(prompt, cwd, reviewersActive, findingsDetail, severityMax, con
     outcome: 'pending',
     scores: scores || {},
     composite_score: compositeScore || null,
+    debate_log,
     cost: {
       input_tokens: inputTokens,
       output_tokens: outputTokens,

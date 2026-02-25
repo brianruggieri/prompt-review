@@ -68,5 +68,12 @@
     "weight_clamp_max": 3.0,
     "auto_adapt": false,
     "auto_adapt_interval_days": 30
+  },
+  "debate": {
+    "enabled": false,
+    "max_pairs": 2,
+    "model": "claude-haiku-4-5",
+    "judge_model": "claude-sonnet-4-6",
+    "min_conflicts_to_trigger": 1
   }
 }
