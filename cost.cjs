@@ -24,7 +24,30 @@ function writeAuditLog(entry) {
   }
 }
 
-function updateAuditOutcome(logDate, promptHash, outcome) {
+function computeReviewerStats(findingsDetail, acceptedIds, rejectedIds) {
+  const stats = {};
+
+  for (const finding of findingsDetail) {
+    const role = finding.reviewer_role;
+    const findingId = finding.finding_id;
+
+    if (!stats[role]) {
+      stats[role] = { proposed: 0, accepted: 0, rejected: 0 };
+    }
+
+    stats[role].proposed++;
+
+    if (acceptedIds && acceptedIds.includes(findingId)) {
+      stats[role].accepted++;
+    } else if (rejectedIds && rejectedIds.includes(findingId)) {
+      stats[role].rejected++;
+    }
+  }
+
+  return stats;
+}
+
+function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedIds) {
   const logFile = path.join(__dirname, 'logs', `${logDate}.jsonl`);
   if (!fs.existsSync(logFile)) return false;
 
@@ -38,6 +61,9 @@ function updateAuditOutcome(logDate, promptHash, outcome) {
       const entry = JSON.parse(line);
       if (entry.original_prompt_hash === promptHash && entry.outcome === 'pending') {
         entry.outcome = outcome;
+        entry.suggestions_accepted = acceptedIds || [];
+        entry.suggestions_rejected = rejectedIds || [];
+        entry.reviewer_stats = computeReviewerStats(entry.findings_detail || [], acceptedIds, rejectedIds);
         updated = true;
         return JSON.stringify(entry);
       }
@@ -53,4 +79,4 @@ function updateAuditOutcome(logDate, promptHash, outcome) {
   return updated;
 }
 
-module.exports = { estimateCost, writeAuditLog, updateAuditOutcome, PRICING };
+module.exports = { estimateCost, writeAuditLog, updateAuditOutcome, computeReviewerStats, PRICING };
