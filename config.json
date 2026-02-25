@@ -1,6 +1,32 @@
 {
+  "version": "2.0",
   "mode": "subscription",
   "api_fallback": true,
+  "phase1_improvements": {
+    "frontend_ux_multi_factor": true,
+    "security_severity_matrix": true,
+    "testing_bugfix_detection": true,
+    "clarity_domain_context": true
+  },
+  "phase2_improvements": {
+    "security_template_safety": true,
+    "documentation_maturity_aware": true,
+    "domain_sme_file_validation": true
+  },
+  "precision_thresholds": {
+    "security": 0.70,
+    "testing": 0.70,
+    "clarity": 0.65,
+    "domain_sme": 0.70,
+    "frontend_ux": 0.75,
+    "documentation": 0.60
+  },
+  "severity_matrix": {
+    "blocker": { "override_weight": 3.0, "requires_user_review": true },
+    "major": { "override_weight": 1.8 },
+    "minor": { "override_weight": 1.0 },
+    "nit": { "override_weight": 0.5 }
+  },
   "models": {
     "reviewer": "claude-haiku-4-5",
     "editor": "claude-sonnet-4-6"
@@ -141,6 +167,24 @@
     "model": "claude-haiku-4-5",
     "judge_model": "claude-sonnet-4-6",
     "min_conflicts_to_trigger": 1
+  },
+  "features": {
+    "reviewer_improvements": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "phase1_enabled": true,
+      "phase2_enabled": true
+    },
+    "maturity_aware_docs": {
+      "enabled": true,
+      "apply_to_projects": ["growing", "stable"],
+      "skip_projects": ["MVP"]
+    },
+    "strict_file_validation": {
+      "enabled": true,
+      "block_on_invalid": false,
+      "warn_only": true
+    }
   },
   "clarity_gate": {
     "enabled": true,
