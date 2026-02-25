@@ -279,7 +279,7 @@ async function runFullPipeline(prompt, options) {
       const totalInput = results.reduce((sum, r) => sum + (r.usage?.input_tokens || 0), 0);
       const totalOutput = results.reduce((sum, r) => sum + (r.usage?.output_tokens || 0), 0);
 
-      logAudit(prompt, cwd, activeReviewers, 0, 'nit', 0, 'subscription', totalInput, totalOutput, durationMs,
+      logAudit(prompt, cwd, activeReviewers, [], 'nit', 0, config.mode, totalInput, totalOutput, durationMs,
         scoringResult ? scoringResult.scores : {}, scoringResult ? scoringResult.composite : null);
 
       return {
@@ -352,7 +352,7 @@ async function runFullPipeline(prompt, options) {
       } : undefined,
     });
 
-    logAudit(prompt, cwd, activeReviewers, merged.allOps.length, merged.severityMax, merged.conflicts.length, config.mode, totalInput, totalOutput, durationMs,
+    logAudit(prompt, cwd, activeReviewers, buildFindingsDetail(merged.allOps), merged.severityMax, merged.conflicts.length, config.mode, totalInput, totalOutput, durationMs,
       scoringResult ? scoringResult.scores : {}, scoringResult ? scoringResult.composite : null);
 
     return {
@@ -367,7 +367,25 @@ async function runFullPipeline(prompt, options) {
   }
 }
 
-function logAudit(prompt, cwd, reviewersActive, findingsCount, severityMax, conflicts, mode, inputTokens, outputTokens, durationMs, scores, compositeScore) {
+function buildFindingsDetail(allOps) {
+  // Maps ops to findings_detail array
+  // Each op becomes: { reviewer_role, finding_id, severity, issue, op, target }
+  const findingsDetail = [];
+  for (const op of (allOps || [])) {
+    const finding = {
+      reviewer_role: op.reviewer_role || 'unknown',
+      finding_id: op.finding_id || `${op.reviewer_role || 'unk'}-${Math.random().toString(36).slice(2, 8)}`,
+      severity: op.severity || 'info',
+      issue: op.issue || op.description || '',
+      op: op.op,
+      target: op.target,
+    };
+    findingsDetail.push(finding);
+  }
+  return findingsDetail;
+}
+
+function logAudit(prompt, cwd, reviewersActive, findingsDetail, severityMax, conflicts, mode, inputTokens, outputTokens, durationMs, scores, compositeScore) {
   writeAuditLog({
     timestamp: new Date().toISOString(),
     project: path.basename(cwd),
@@ -375,7 +393,11 @@ function logAudit(prompt, cwd, reviewersActive, findingsCount, severityMax, conf
     mode,
     original_prompt_hash: hashPrompt(prompt),
     reviewers_active: reviewersActive,
-    findings_count: findingsCount,
+    findings_count: findingsDetail.length,
+    findings_detail: findingsDetail,
+    suggestions_accepted: [],
+    suggestions_rejected: [],
+    reviewer_stats: {},
     severity_max: severityMax,
     conflicts,
     outcome: 'pending',
@@ -460,10 +482,10 @@ if (require.main === module) {
   }
 }
 
-function updateOutcome(promptHash, outcome) {
+function updateOutcome(promptHash, outcome, acceptedIds, rejectedIds) {
   const { updateAuditOutcome } = require('./cost.cjs');
   const today = new Date().toISOString().slice(0, 10);
-  return updateAuditOutcome(today, promptHash, outcome);
+  return updateAuditOutcome(today, promptHash, outcome, acceptedIds, rejectedIds);
 }
 
 module.exports = {
