@@ -414,6 +414,125 @@ Every API call is tracked:
 
 Update in `cost.cjs`: `estimateCost()` function (pricing model)
 
+### Audit Log Query Recipes
+
+Working with `logs/*.jsonl` files for analysis. All examples use Node.js built-ins only (no jq dependency).
+
+**Query 1: Extract acceptance rate per reviewer for last 30 days**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const LOGS_DIR = path.join(__dirname, 'logs');
+const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl') && new Date(f.replace('.jsonl', '')) >= cutoff);
+
+const stats = {};
+for (const file of files) {
+  const lines = fs.readFileSync(path.join(LOGS_DIR, file), 'utf-8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line);
+    if (!e.findings_detail) continue;
+    for (const f of e.findings_detail) {
+      const role = f.reviewer_role;
+      if (!stats[role]) stats[role] = { proposed: 0, accepted: 0 };
+      stats[role].proposed++;
+      if (e.suggestions_accepted && e.suggestions_accepted.includes(f.finding_id)) {
+        stats[role].accepted++;
+      }
+    }
+  }
+}
+for (const [role, {proposed, accepted}] of Object.entries(stats)) {
+  const pct = (accepted/proposed*100).toFixed(0);
+  console.log(\`\${role.padEnd(18)} \${proposed} proposed, \${accepted} accepted (\${pct}%)\`);
+}
+"
+```
+
+**Query 2: List all blocker findings and their outcomes**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const LOGS_DIR = path.join(__dirname, 'logs');
+const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl'));
+
+for (const file of files) {
+  const lines = fs.readFileSync(path.join(LOGS_DIR, file), 'utf-8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line);
+    if (!e.findings_detail) continue;
+    for (const f of e.findings_detail) {
+      if (f.severity !== 'blocker') continue;
+      const accepted = e.suggestions_accepted && e.suggestions_accepted.includes(f.finding_id) ? 'ACCEPTED' : 'REJECTED';
+      console.log(\`\${f.reviewer_role} [\${accepted}] \${f.issue}\`);
+    }
+  }
+}
+"
+```
+
+**Query 3: Composite score distribution (0–10 buckets)**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const LOGS_DIR = path.join(__dirname, 'logs');
+const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl'));
+
+const buckets = {};
+for (let i = 0; i <= 10; i++) buckets[i] = 0;
+
+for (const file of files) {
+  const lines = fs.readFileSync(path.join(LOGS_DIR, file), 'utf-8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line);
+    if (e.composite_score !== null && e.composite_score !== undefined) {
+      const bucket = Math.floor(e.composite_score);
+      buckets[bucket]++;
+    }
+  }
+}
+for (let i = 0; i <= 10; i++) {
+  const count = buckets[i] || 0;
+  const bar = '█'.repeat(count);
+  console.log(\`\${i}-\${i + 0.9}: \${bar} (\${count})\`);
+}
+"
+```
+
+**Query 4: Weight history deltas (what changed and when)**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const whFile = path.join(__dirname, 'logs', 'weight-history.jsonl');
+if (!fs.existsSync(whFile)) {
+  console.log('No weight changes recorded yet.');
+  process.exit(0);
+}
+const lines = fs.readFileSync(whFile, 'utf-8').split('\n').filter(l => l.trim());
+for (const line of lines) {
+  const e = JSON.parse(line);
+  console.log(\`\n\${e.timestamp}:\`);
+  for (const [role, after] of Object.entries(e.weights_after)) {
+    const before = e.weights_before[role] || 1.0;
+    const delta = (after - before).toFixed(2);
+    const dir = after > before ? '↑' : after < before ? '↓' : '=';
+    console.log(\`  \${role.padEnd(18)} \${before.toFixed(2)} → \${after.toFixed(2)} \${dir} \${delta}\`);
+  }
+}
+"
+```
+
 ### Test Pattern
 
 All tests use `assert` only, no test framework:

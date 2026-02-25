@@ -187,6 +187,138 @@ Policy proposals are written to `reviewers/prompts/<role>.txt` for human review 
 
 ---
 
+## Scoring System & Validation
+
+### Understanding Composite Scores
+
+Each review produces a **composite score** (0–10) combining individual specialist scores:
+
+```
+composite = Σ(score_i × weight_i) / Σ(weight_i)
+```
+
+**Example:** Security scores 8.0 (weight 1.2), Clarity scores 6.5 (weight 1.0):
+```
+composite = (8.0 × 1.2 + 6.5 × 1.0) / (1.2 + 1.0) = 7.32 / 10
+```
+
+### Score Interpretation
+
+| Range | Meaning | Action |
+|-------|---------|--------|
+| **0–3** | Poor | Prompt is entirely vague or ambiguous |
+| **4–6** | Needs Work | Significant issues affecting output quality |
+| **7–9** | Good | Minor improvements possible |
+| **10** | Excellent | Precise verbs, clear scope, output specified |
+
+### What Affects Scores?
+
+Each specialist rates on different criteria:
+
+- **Security** (weight 2.0): Is authentication, encryption, input validation addressed?
+- **Testing** (weight 1.5): Are acceptance criteria and test cases defined?
+- **Domain SME** (weight 1.5): Does the prompt match domain best practices?
+- **Documentation** (weight 1.0): Are output formats and usage documented?
+- **UX** (weight 1.0, conditional): If UI/component involved—accessibility, responsiveness?
+- **Clarity** (weight 1.0): Is scope defined? Are outputs specified? Are terms unambiguous?
+
+Higher-weight reviewers (security, testing) have more influence on the composite.
+
+### Validating Score Accuracy
+
+**Run a calibration check:**
+
+```bash
+node adapt.cjs 30 --benchmark
+```
+
+This compares your current adapted weights against equal weighting (all 1.0). Shows which specialist roles have highest real impact on acceptance rate.
+
+**Check post-adaptation impact:**
+
+```bash
+node adapt.cjs --history
+```
+
+Shows before/after precision for each weight change. Helps verify whether adapted weights actually improved feedback quality.
+
+### How Precision Is Measured
+
+**Precision** = `accepted findings / proposed findings`
+
+Example: If Security found 5 issues and user accepted 3:
+```
+precision = 3 / 5 = 0.60 (60%)
+```
+
+**Important limitations:**
+- Does NOT measure recall (how many issues Security missed)
+- Does NOT measure finding importance (all findings weighted equally)
+- May be influenced by user accepting findings for reasons other than correctness
+
+**For better precision signals, look at:**
+
+1. **Acceptance rate by severity**
+   - Major findings: What % of "blocker" findings did users actually fix?
+   - Minor findings: What % of "nit" suggestions were helpful?
+
+2. **Coverage ratio** (recall proxy)
+   - In what % of reviews did this reviewer find at least one accepted issue?
+   - Low coverage + high precision = "plays it safe" (risky pattern)
+
+3. **Rejection reason** (when tracked)
+   - "invalid" — Finding was wrong (true precision miss)
+   - "deferred" — Valid but out of scope (not precision miss)
+   - "conflict" — Conflicted with another finding (not precision miss)
+
+### Fairness & Bias Detection
+
+If one specialist dominates (>40% of composite score), you'll see a warning:
+
+```
+⚠ Fairness: Security dominates composite (>40%)
+```
+
+This means one reviewer's opinion outweighs the others. To rebalance:
+
+```bash
+# Check contribution share
+node index.cjs --stats
+
+# Then adjust weights in config.json:
+"weights": {
+  "security": 1.2,    # was 2.0, reduce
+  "clarity": 1.2      # was 1.0, increase
+}
+```
+
+### Running Evaluations
+
+**Check system health over last 30 days:**
+
+```bash
+node adapt.cjs 30
+```
+
+Shows:
+- Reviews analyzed
+- Precision per role
+- Weight suggestions based on performance
+
+**See historical trends:**
+
+```bash
+node index.cjs --stats
+```
+
+Shows:
+- Score trend by week
+- Most common issues
+- Reviewer effectiveness
+- Acceptance rates by severity
+
+---
+
 ## Quick Start
 
 ### 1. Installation (1 minute)
