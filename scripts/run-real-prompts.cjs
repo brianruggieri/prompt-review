@@ -11,12 +11,12 @@ async function runSinglePrompt(hash) {
 		// (we never have the original, but orchestrator still processes it)
 		const synthesizedPrompt = `${hash}: Technical validation prompt for real-world analysis`;
 
-		// Run through actual orchestrator pipeline in API mode
-		// (Direct Anthropic API - fast, practical cost per batch)
+		// Run through actual orchestrator pipeline in subscription mode
+		// (Claude Code dispatch - included in your subscription, zero cost)
 		const result = await runFullPipeline(
 			synthesizedPrompt,
 			process.cwd(),
-			'api',  // API mode: Direct calls to Claude API (recommended for validation)
+			'subscription',  // Subscription mode only: dispatch via Claude Code (no API costs)
 			null,   // no custom client
 			null    // default config
 		);
