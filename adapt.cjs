@@ -175,11 +175,15 @@ if (require.main === module) {
 		console.log('Comparing: Current Weights vs Equal Weights (all 1.0)\n');
 
 		// Compute impact of equal weights
+		// currentWeights must come from config (numeric), not from reviewer metrics objects
+		const configPath = path.join(__dirname, 'config.json');
+		const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+		const configWeights = (configData.scoring && configData.scoring.weights) || {};
 		const equalWeights = {};
 		const currentWeights = {};
 		for (const role of Object.keys(result.report.reviewers)) {
 			equalWeights[role] = 1.0;
-			currentWeights[role] = result.report.reviewers[role];
+			currentWeights[role] = configWeights[role] || 1.0;
 		}
 
 		console.log('Role            Current  Equal   Precision  Coverage  Change');

@@ -97,13 +97,22 @@ const commands = {
 		if (subcommand === 'status') {
 			try {
 				const status = getBatchStatus();
-				console.log('\nBatch Status:');
-				console.log(`✓ Completed: ${status.completed.length} (${status.completed.length * 100} prompts)`);
-				console.log(`⏳ Pending: ${status.pending.length} batches (${status.pending.length * 100} prompts)`);
+				const manifest = loadManifest();
+				const totalPrompts = (manifest && manifest.total_prompts) || 0;
 
-				const progressPct = Math.round((status.completed.length / 13) * 100);
-				const totalProcessed = status.completed.length * 100;
-				console.log(`Progress: ${progressPct}% (${totalProcessed}/1309)`);
+				// Sum actual prompt_count from completed batches rather than assuming 100/batch
+				let completedPrompts = 0;
+				for (const batchId of status.completed) {
+					const batch = manifest && manifest.batches && manifest.batches[batchId];
+					completedPrompts += (batch && batch.prompt_count) ? batch.prompt_count : 100;
+				}
+
+				console.log('\nBatch Status:');
+				console.log(`✓ Completed: ${status.completed.length} batches (${completedPrompts} prompts)`);
+				console.log(`⏳ Pending: ${status.pending.length} batches`);
+
+				const progressPct = totalPrompts > 0 ? Math.round((completedPrompts / totalPrompts) * 100) : 0;
+				console.log(`Progress: ${progressPct}% (${completedPrompts}/${totalPrompts})`);
 				console.log('');
 
 				if (status.completed.length > 0) {

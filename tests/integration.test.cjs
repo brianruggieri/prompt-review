@@ -128,17 +128,16 @@ const crypto = require('crypto');
 {
 	const { withTimeout } = require('../orchestrator.cjs');
 
-	// Should resolve for fast promises
-	(async () => {
-		const result = await withTimeout(Promise.resolve('ok'), 1000, 'test');
-		assert.strictEqual(result, 'ok', 'Should resolve fast promises');
-	})().catch(e => { throw e; });
+	// Run async assertions and only print success after they complete
+	;(async () => {
+		// Should resolve for fast promises
+		const result1 = await withTimeout(Promise.resolve('ok'), 1000, 'test');
+		assert.strictEqual(result1, 'ok', 'Should resolve fast promises');
 
-	// Should pass through when ms is 0
-	(async () => {
-		const result = await withTimeout(Promise.resolve('ok'), 0, 'test');
-		assert.strictEqual(result, 'ok', 'Should pass through when timeout is 0');
+		// Should pass through when ms is 0
+		const result2 = await withTimeout(Promise.resolve('ok'), 0, 'test');
+		assert.strictEqual(result2, 'ok', 'Should pass through when timeout is 0');
+
+		console.log('integration.test: all tests passed');
 	})().catch(e => { throw e; });
 }
-
-console.log('integration.test: all tests passed');

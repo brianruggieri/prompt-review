@@ -125,10 +125,11 @@ const { readAuditLogs, computeScoreTrend, computeOutcomes, computeSeverityTrend,
 	assert.ok(Math.abs(total - 1.0) < 0.001, 'Shares must sum to 1.0 with default weights');
 }
 
-// Empty entries returns empty shares without crashing
+// Empty entries returns consistent shape without crashing
 {
 	const result = computeContributionShare([], { security: 1.0 });
-	assert.deepStrictEqual(result, {}, 'Empty entries must return empty object');
+	assert.deepStrictEqual(result.contribution_share, {}, 'Empty entries must return empty contribution_share');
+	assert.deepStrictEqual(result.dominant_roles, [], 'Empty entries must return empty dominant_roles');
 }
 
 // Entries with all-zero scores are skipped (avoid division by zero)

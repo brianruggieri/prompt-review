@@ -355,7 +355,7 @@ function computeContributionShare(entries, weights) {
   }
 
   // Average contribution across entries
-  if (entryCount === 0) return shares;
+  if (entryCount === 0) return { contribution_share: {}, dominant_roles: [] };
 
   const dominantRoles = [];
   for (const [role, totalContrib] of Object.entries(roleContributions)) {

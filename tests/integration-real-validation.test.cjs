@@ -2,6 +2,13 @@ const assert = require('assert');
 const { extractRealPrompts } = require('../scripts/extract-real-prompts.cjs');
 const { analyzeFindings } = require('../scripts/analyze-findings.cjs');
 
+// This test reads real local Claude session files. Skip in CI or on machines
+// without Claude Code session logs unless the env flag is explicitly set.
+if (!process.env.RUN_REAL_PROMPT_VALIDATION) {
+	console.log('integration-real-validation.test.cjs: skipped (set RUN_REAL_PROMPT_VALIDATION=1 to run)');
+	process.exit(0);
+}
+
 // Extract up to 10 real prompts from actual Claude Code sessions
 const prompts = extractRealPrompts({ limit: 10 });
 

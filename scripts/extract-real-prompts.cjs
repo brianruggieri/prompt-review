@@ -1,10 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 
 function extractRealPrompts(options = {}) {
 	const {
-		claudeSessionsDir = path.join(process.env.HOME, '.claude/projects'),
+		claudeSessionsDir = path.join(os.homedir(), '.claude/projects'),
 		minLength = 10,
 		maxLength = 5000,
 		limit = 200
