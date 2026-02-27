@@ -133,9 +133,13 @@ function computeTopPatterns(entries) {
 
 function computeReviewerEffectiveness(entries) {
   const reviewerMap = {};
+  const totalReviews = entries.length;
 
   for (const entry of entries) {
     if (!entry.findings_detail || !Array.isArray(entry.findings_detail)) continue;
+
+    // Track which roles had accepted findings in this review
+    const rolesWithAccepted = new Set();
 
     for (const finding of entry.findings_detail) {
       const role = finding.reviewer_role;
@@ -147,6 +151,7 @@ function computeReviewerEffectiveness(entries) {
           accepted: 0,
           rejected: 0,
           review_count: 0,
+          reviews_with_accepted: new Set(), // reviews where role found at least 1 accepted
           participations: new Set(),
         };
       }
@@ -157,9 +162,15 @@ function computeReviewerEffectiveness(entries) {
 
       if (entry.suggestions_accepted && entry.suggestions_accepted.includes(findingId)) {
         reviewerMap[role].accepted++;
+        rolesWithAccepted.add(role);
       } else if (entry.suggestions_rejected && entry.suggestions_rejected.includes(findingId)) {
         reviewerMap[role].rejected++;
       }
+    }
+
+    // Mark reviews where roles found accepted findings
+    for (const role of rolesWithAccepted) {
+      reviewerMap[role].reviews_with_accepted.add(entry.timestamp);
     }
   }
 
@@ -168,11 +179,14 @@ function computeReviewerEffectiveness(entries) {
   for (const [role, data] of Object.entries(reviewerMap)) {
     const reviewCount = data.participations.size;
     const precision = data.proposed > 0 ? data.accepted / data.proposed : 0;
+    const coverageRatio = totalReviews > 0 ? data.reviews_with_accepted.size / totalReviews : 0;
 
     result[role] = {
       precision: Math.round(precision * 10000) / 10000,
       proposed: data.proposed,
       accepted: data.accepted,
+      rejected: data.rejected,
+      coverage_ratio: Math.round(coverageRatio * 10000) / 10000,
       review_count: reviewCount,
     };
   }
@@ -307,9 +321,73 @@ function renderDashboardJson(stats) {
   return JSON.stringify(stats, null, 2);
 }
 
+function computeContributionShare(entries, weights) {
+  weights = weights || {};
+  const shares = {};
+  let totalContribution = 0;
+
+  // For each entry, compute each role's contribution to composite score
+  const roleContributions = {};
+  let entryCount = 0;
+
+  for (const entry of entries) {
+    if (!entry.scores || entry.composite_score === null) continue;
+
+    // Normalize by total weighted score so each entry's contributions sum to 1
+    // (not by sum-of-weights, which would produce values in score-point range ~0-10)
+    const totalWeightedScore = Object.entries(entry.scores).reduce((sum, [role, score]) => {
+      const weight = weights[role] || 1.0;
+      return sum + score * weight;
+    }, 0);
+
+    if (totalWeightedScore === 0) continue;
+    entryCount++; // only count entries that actually contribute data
+
+    for (const [role, score] of Object.entries(entry.scores)) {
+      const weight = weights[role] || 1.0;
+      const contribution = (score * weight) / totalWeightedScore;
+
+      if (!roleContributions[role]) {
+        roleContributions[role] = 0;
+      }
+      roleContributions[role] += contribution;
+    }
+  }
+
+  // Average contribution across entries
+  if (entryCount === 0) return { contribution_share: {}, dominant_roles: [] };
+
+  const dominantRoles = [];
+  for (const [role, totalContrib] of Object.entries(roleContributions)) {
+    const avgShare = totalContrib / entryCount;
+    shares[role] = Math.round(avgShare * 10000) / 10000;
+    if (avgShare > 0.4) {
+      dominantRoles.push(role);
+    }
+  }
+
+  return { contribution_share: shares, dominant_roles: dominantRoles };
+}
+
 function generateStats(days) {
   const numDays = days === 'all' ? null : (parseInt(days) || 30);
   const entries = loadLogsFromDisk(numDays);
+
+  const effectiveness = computeReviewerEffectiveness(entries);
+
+  // Get weights from config for fairness analysis
+  let weights = {};
+  try {
+    const configPath = require('path').join(__dirname, 'config.json');
+    const config = JSON.parse(require('fs').readFileSync(configPath, 'utf-8'));
+    if (config.scoring && config.scoring.weights) {
+      weights = config.scoring.weights;
+    }
+  } catch (e) {
+    // Use default weights
+  }
+
+  const fairnessAnalysis = computeContributionShare(entries, weights);
 
   const stats = {
     period: days === 'all' ? 'all' : `${numDays}d`,
@@ -318,7 +396,9 @@ function generateStats(days) {
     subscores: computeSubscoreTrend(entries),
     severityTrend: computeSeverityTrend(entries),
     topPatterns: computeTopPatterns(entries),
-    effectiveness: computeReviewerEffectiveness(entries),
+    effectiveness: effectiveness,
+    contribution_share: fairnessAnalysis.contribution_share,
+    dominant_roles: fairnessAnalysis.dominant_roles,
   };
 
   return stats;
@@ -333,6 +413,7 @@ module.exports = {
   computeSeverityTrend,
   computeTopPatterns,
   computeReviewerEffectiveness,
+  computeContributionShare,
   renderDashboard,
   renderDashboardJson,
   generateStats,

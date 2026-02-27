@@ -195,7 +195,7 @@ function computeCompositeScore(critiques, weights) {
 
   for (const critique of critiques) {
     if (critique.score === undefined || critique.score === null) continue;
-    if (typeof critique.score !== 'number') continue;
+    if (typeof critique.score !== 'number' || isNaN(critique.score)) continue;
 
     const role = critique.reviewer_role;
     const weight = (weights && weights[role]) || 1.0;

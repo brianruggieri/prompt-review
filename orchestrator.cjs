@@ -2,6 +2,15 @@ const path = require('path');
 const fs = require('fs');
 const { validateCritique } = require('./schemas.cjs');
 
+function withTimeout(promise, ms, label) {
+	if (!ms || ms <= 0) return promise;
+	let timer;
+	const timeout = new Promise((_, reject) => {
+		timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+	});
+	return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const REVIEWER_FILES = {
   domain_sme: 'domain-sme.cjs',
   security: 'security.cjs',
@@ -22,7 +31,49 @@ function loadReviewer(role) {
   }
 }
 
-function shouldFireConditional(triggers, prompt, context) {
+function shouldFireFrontendUX(triggers, prompt, context) {
+  // Frontend/UX has stricter multi-factor requirements to avoid false positives
+  const promptLower = prompt.toLowerCase();
+
+  // Check skip keywords first — if any match, don't fire
+  if (triggers.skip_keywords && triggers.skip_keywords.length > 0) {
+    for (const keyword of triggers.skip_keywords) {
+      if (promptLower.includes(keyword.toLowerCase())) {
+        return false;
+      }
+    }
+  }
+
+  // Multi-factor check: Need at least one of:
+  // 1. Two or more UI keywords
+  // 2. One UI keyword AND UI file patterns found
+  // 3. UI files present AND no backend-specific keywords
+
+  const uiKeywords = triggers.prompt_keywords || [];
+  const uiKeywordCount = uiKeywords.filter(kw => promptLower.includes(kw.toLowerCase())).length;
+
+  // Check for UI file patterns
+  const uiFilePatterns = triggers.file_patterns || ['*.css', '*.scss', '*.tsx', '*.vue', '*.svelte'];
+  const hasUIFiles = context.files && context.files.some(f => {
+    return uiFilePatterns.some(pattern => {
+      const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+      return regex.test(f);
+    });
+  });
+
+  // Check for backend/non-UI keywords (rules out false positives like "component algorithm")
+  const backendKeywords = ['algorithm', 'architecture', 'performance', 'database', 'query', 'index', 'schema'];
+  const hasBackendContext = backendKeywords.some(kw => promptLower.includes(kw));
+
+  // Decision logic
+  if (uiKeywordCount >= 2) return true;               // 2+ UI keywords → fire
+  if (uiKeywordCount >= 1 && hasUIFiles) return true; // 1+ UI keywords + UI files → fire
+  if (hasUIFiles && !hasBackendContext) return true;  // UI files present and no backend keywords → fire
+
+  return false;
+}
+
+function shouldFireConditional(triggers, prompt, context, role) {
   if (!triggers) return false;
   const promptLower = prompt.toLowerCase();
 
@@ -76,7 +127,15 @@ function determineActiveReviewers(config, prompt, context) {
       active.push(role);
     } else {
       // Conditional reviewer — check triggers
-      if (shouldFireConditional(settings.triggers, prompt, context)) {
+      let shouldFire = false;
+      if (role === 'frontend_ux') {
+        // Frontend/UX uses multi-factor trigger logic
+        shouldFire = shouldFireFrontendUX(settings.triggers, prompt, context);
+      } else {
+        shouldFire = shouldFireConditional(settings.triggers, prompt, context, role);
+      }
+
+      if (shouldFire) {
         active.push(role);
       }
     }
@@ -105,7 +164,7 @@ function runReviewersSubscription(activeRoles, prompt, context) {
   return buildReviewerPrompts(activeRoles, prompt, context);
 }
 
-async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
+async function runReviewersApi(activeRoles, prompt, context, apiKey, model, timeoutMs) {
   // In API mode, call Anthropic API directly in parallel
   let Anthropic;
   try {
@@ -119,12 +178,16 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
 
   const results = await Promise.allSettled(
     reviewerPrompts.map(async ({ role, system, user }) => {
-      const response = await client.messages.create({
-        model: model || 'claude-haiku-4-5-20251001',
-        max_tokens: 2048,
-        system,
-        messages: [{ role: 'user', content: user }],
-      });
+      const response = await withTimeout(
+        client.messages.create({
+          model: model || 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          system,
+          messages: [{ role: 'user', content: user }],
+        }),
+        timeoutMs,
+        `Reviewer ${role}`
+      );
 
       const text = response.content
         .filter(b => b.type === 'text')
@@ -136,7 +199,12 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
       const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) jsonStr = jsonMatch[1];
 
-      const critique = JSON.parse(jsonStr.trim());
+      let critique;
+      try {
+        critique = JSON.parse(jsonStr.trim());
+      } catch (parseErr) {
+        throw new Error(`Failed to parse ${role} response as JSON: ${parseErr.message}. Response: "${text.slice(0, 80)}..."`);
+      }
       const validation = validateCritique(critique);
 
       return {
@@ -164,7 +232,9 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
 }
 
 module.exports = {
+  withTimeout,
   shouldFireConditional,
+  shouldFireFrontendUX,
   determineActiveReviewers,
   buildReviewerPrompts,
   runReviewersSubscription,

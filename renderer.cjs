@@ -81,6 +81,13 @@ function renderReviewBlock(data) {
     lines.push(`| Score: ${data.scoring.composite} / 10  (${subscores})`);
   }
 
+  // Fairness warning (if any role dominates > 40%)
+  const dominantRoles = data.dominantRoles || data.dominant_roles;
+  if (dominantRoles && dominantRoles.length > 0) {
+    const dominantLabel = dominantRoles.map(r => ROLE_LABELS[r] || r).join(', ');
+    lines.push(`| ⚠ Fairness: ${dominantLabel} dominates composite (>40%)   |`);
+  }
+
   // Cost line
   lines.push(`| Cost: ${formatCost(data.cost)} | ${formatDuration(data.durationMs)}`);
   lines.push('|                                                            |');

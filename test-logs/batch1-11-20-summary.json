@@ -1,0 +1,185 @@
+{
+  "batch": "1",
+  "prompts_range": "11-20",
+  "total_prompts": 10,
+  "review_date": "2026-02-25",
+  "specialists": ["security", "testing", "clarity", "domain_sme", "documentation"],
+  "summary": {
+    "average_composite_score": 6.88,
+    "total_findings": 11,
+    "blockers": 0,
+    "majors": 4,
+    "minors": 6,
+    "nits": 1,
+    "prompts_with_issues": 8,
+    "prompts_clean": 2
+  },
+  "severity_breakdown": {
+    "blocker": "0 (0%)",
+    "major": "4 (36%)",
+    "minor": "6 (55%)",
+    "nit": "1 (9%)"
+  },
+  "results": [
+    {
+      "hash": "bb682d5d27a8",
+      "findings": 1,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 1,
+      "nits": 0,
+      "compositeScore": 6.98,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 6.9,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "9cffd38e803e",
+      "findings": 1,
+      "blockers": 0,
+      "majors": 1,
+      "minors": 0,
+      "nits": 0,
+      "compositeScore": 6.7,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 5.5,
+        "clarity": 7.0,
+        "domain_sme": 7.0,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "dbd7cebfaaeb",
+      "findings": 0,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 0,
+      "nits": 0,
+      "compositeScore": 7.0,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 7.0,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "c3b168411307",
+      "findings": 1,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 1,
+      "nits": 0,
+      "compositeScore": 7.0,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 7.0,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "de0a4846d341",
+      "findings": 1,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 1,
+      "nits": 0,
+      "compositeScore": 7.0,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 7.0,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "5f6db9f45943",
+      "findings": 2,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 1,
+      "nits": 1,
+      "compositeScore": 6.98,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 6.9,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "e29d99b9df48",
+      "findings": 1,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 1,
+      "nits": 0,
+      "compositeScore": 6.98,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 6.9,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "18d70f75f741",
+      "findings": 2,
+      "blockers": 0,
+      "majors": 2,
+      "minors": 0,
+      "nits": 0,
+      "compositeScore": 6.4,
+      "reviewerScores": {
+        "security": 5.5,
+        "testing": 5.5,
+        "clarity": 7.0,
+        "domain_sme": 7.0,
+        "documentation": 7.0
+      }
+    },
+    {
+      "hash": "684b03f6f517",
+      "findings": 2,
+      "blockers": 0,
+      "majors": 1,
+      "minors": 1,
+      "nits": 0,
+      "compositeScore": 6.74,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 6.9,
+        "documentation": 5.8
+      }
+    },
+    {
+      "hash": "2f308b2d523f",
+      "findings": 0,
+      "blockers": 0,
+      "majors": 0,
+      "minors": 0,
+      "nits": 0,
+      "compositeScore": 7.0,
+      "reviewerScores": {
+        "security": 7.0,
+        "testing": 7.0,
+        "clarity": 7.0,
+        "domain_sme": 7.0,
+        "documentation": 7.0
+      }
+    }
+  ]
+}

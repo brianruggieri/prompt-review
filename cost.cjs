@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PRICING = {
   'claude-haiku-4-5':   { input: 1.0,  output: 5.0 },  // per MTok
@@ -8,14 +9,41 @@ const PRICING = {
 };
 
 function estimateCost(model, inputTokens, outputTokens) {
-  const pricing = PRICING[model] || PRICING['claude-haiku-4-5'];
+  const pricing = PRICING[model];
+  if (!pricing) return 0;
   return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+}
+
+function computeEntryHash(entry) {
+  // Exclude __hash from hash computation
+  const contentCopy = { ...entry };
+  delete contentCopy.__hash;
+  const jsonStr = JSON.stringify(contentCopy);
+  return crypto.createHash('sha256').update(jsonStr).digest('hex').slice(0, 16);
+}
+
+function verifyAuditEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return { valid: false, reason: 'Entry is not an object' };
+  }
+  if (!entry.__hash) {
+    return { valid: false, reason: 'Entry has no __hash field' };
+  }
+  const computed = computeEntryHash(entry);
+  if (computed !== entry.__hash) {
+    return { valid: false, reason: `Hash mismatch: expected ${entry.__hash}, computed ${computed}` };
+  }
+  return { valid: true, reason: 'OK' };
 }
 
 function writeAuditLog(entry) {
   const logsDir = path.join(__dirname, 'logs');
   try {
     if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+    // Compute and attach hash before writing
+    entry.__hash = computeEntryHash(entry);
+
     const date = new Date().toISOString().slice(0, 10);
     const logFile = path.join(logsDir, `${date}.jsonl`);
     fs.appendFileSync(logFile, JSON.stringify(entry) + '\n');
@@ -47,7 +75,7 @@ function computeReviewerStats(findingsDetail, acceptedIds, rejectedIds) {
   return stats;
 }
 
-function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedIds) {
+function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedIds, rejectionReasons = {}) {
   const logFile = path.join(__dirname, 'logs', `${logDate}.jsonl`);
   if (!fs.existsSync(logFile)) return false;
 
@@ -60,10 +88,34 @@ function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedI
     try {
       const entry = JSON.parse(line);
       if (entry.original_prompt_hash === promptHash && entry.outcome === 'pending') {
+        // Verify hash before proceeding; treat missing __hash as unverifiable
+        // but updatable (legacy entries pre-dating hash support)
+        if (entry.__hash) {
+          const verification = verifyAuditEntry(entry);
+          if (!verification.valid) {
+            // Hash mismatch — entry may have been tampered; skip update
+            return line;
+          }
+        }
+
         entry.outcome = outcome;
         entry.suggestions_accepted = acceptedIds || [];
         entry.suggestions_rejected = rejectedIds || [];
+        entry.rejection_details = {};
+
+        // Store rejection reasons if provided
+        if (rejectionReasons && Object.keys(rejectionReasons).length > 0) {
+          entry.rejection_details = rejectionReasons;
+        } else {
+          // Default: mark all rejections as 'unknown' reason
+          for (const rejectedId of (rejectedIds || [])) {
+            entry.rejection_details[rejectedId] = 'unknown';
+          }
+        }
+
         entry.reviewer_stats = computeReviewerStats(entry.findings_detail || [], acceptedIds, rejectedIds);
+        // Compute new hash for mutated entry
+        entry.__hash = computeEntryHash(entry);
         updated = true;
         return JSON.stringify(entry);
       }
@@ -79,4 +131,4 @@ function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedI
   return updated;
 }
 
-module.exports = { estimateCost, writeAuditLog, updateAuditOutcome, computeReviewerStats, PRICING };
+module.exports = { estimateCost, writeAuditLog, updateAuditOutcome, computeReviewerStats, computeEntryHash, verifyAuditEntry, PRICING };

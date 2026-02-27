@@ -1,3 +1,50 @@
+// File extensions ordered by length (longest first) to avoid partial matches
+const FILE_REFERENCE_PATTERNS = [
+	/refer(?:ence|ring)?\s+to\s+([^\s,\.]+\.(?:tsx|jsx|yaml|json|bash|java|kotlin|md|txt|sh|ts|js|py|go|rs|kt|c|h))/gi,
+	/(?:see|check|read|look at|open)\s+(?:file\s+)?([^\s,\.]+\.(?:tsx|jsx|yaml|json|bash|java|kotlin|md|txt|sh|ts|js|py|go|rs|kt|c|h))/gi,
+	/(?:in|at|update|modify|edit|change)\s+(?:file\s+)?([^\s,\.]+\.(?:tsx|jsx|yaml|json|bash|java|kotlin|md|txt|sh|ts|js|py|go|rs|kt|c|h))/gi,
+	/`([^\s`]+\.(?:tsx|jsx|yaml|json|bash|java|kotlin|md|txt|sh|ts|js|py|go|rs|kt|c|h))`/gi,
+];
+
+function extractFileReferences(prompt) {
+	const files = new Set();
+	for (const pattern of FILE_REFERENCE_PATTERNS) {
+		let match;
+		while ((match = pattern.exec(prompt)) !== null) {
+			const file = match[1]?.trim();
+			if (file && !file.includes('(') && file.length > 2) {
+				files.add(file);
+			}
+		}
+	}
+	return Array.from(files);
+}
+
+function validateFilePathsExist(filePaths, context) {
+	// Only validate if context includes a file list
+	if (!context.files || !Array.isArray(context.files)) {
+		return { valid: [], invalid: [] };
+	}
+
+	const projectFiles = new Set(context.files);
+	const valid = [];
+	const invalid = [];
+
+	for (const filePath of filePaths) {
+		// Check for exact match or partial match (e.g., "types.ts" might be "src/types.ts")
+		const hasExact = projectFiles.has(filePath);
+		const hasPartial = Array.from(projectFiles).some(f => f.endsWith(filePath) || f.endsWith('/' + filePath));
+
+		if (hasExact || hasPartial) {
+			valid.push(filePath);
+		} else {
+			invalid.push(filePath);
+		}
+	}
+
+	return { valid, invalid };
+}
+
 const SYSTEM_PROMPT = `You are a Domain SME (Subject Matter Expert) reviewer for Claude Code prompts. Your job is to check whether the prompt accounts for the project's technology stack, conventions, and architecture.
 
 You will receive the user's original prompt along with project context (CLAUDE.md, stack detection, directory structure, conventions).
@@ -9,6 +56,7 @@ You will receive the user's original prompt along with project context (CLAUDE.m
 3. **Missing context** — Is the prompt missing critical context that would lead Claude astray? (e.g., referencing files that don't exist, assuming a different architecture)
 4. **Architectural conflicts** — Would following the prompt violate the project's architecture? (e.g., creating barrel exports in a project that forbids them, using classes in a functional codebase)
 5. **Dependency awareness** — Does the prompt account for existing dependencies and avoid introducing unnecessary new ones?
+6. **File path validation** — If the prompt references specific files (e.g., "refer to src/types.ts"), do those files actually exist in the project?
 
 ## Your Operations
 
@@ -77,6 +125,19 @@ function buildPrompt(originalPrompt, context) {
   if (context.buildTool) {
     userContent += `**Build Tool:** ${context.buildTool}\n`;
   }
+
+	// File path validation
+	const referencedFiles = extractFileReferences(originalPrompt);
+	if (referencedFiles.length > 0) {
+		const { valid, invalid } = validateFilePathsExist(referencedFiles, context);
+		userContent += `\n**File References in Prompt:**\n`;
+		userContent += `- Found: ${valid.join(', ') || '(none)'}\n`;
+		if (invalid.length > 0) {
+			userContent += `⚠️ **NOT FOUND:** ${invalid.join(', ')}\n`;
+			userContent += `  Check if these files exist or if the reference is incorrect.\n`;
+		}
+	}
+
   if (context.conventions && context.conventions.length > 0) {
     userContent += `\n**Conventions (from CLAUDE.md):**\n${context.conventions.map(c => `- ${c}`).join('\n')}\n`;
   }
@@ -101,4 +162,8 @@ module.exports = {
   buildPrompt,
   conditional: false,
   triggers: {},
+  FILE_REFERENCE_PATTERNS,
+  extractFileReferences,
+  validateFilePathsExist,
+  SYSTEM_PROMPT,
 };

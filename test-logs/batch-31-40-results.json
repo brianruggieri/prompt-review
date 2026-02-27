@@ -1,0 +1,172 @@
+[
+  {
+    "hash": "378bdd9b5f29",
+    "findings": 3,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 2,
+    "nits": 1,
+    "compositeScore": 6.26,
+    "reviewerScores": {
+      "security": 6.5,
+      "testing": 6,
+      "clarity": 6.5,
+      "domain_sme": 6,
+      "frontend_ux": 6.5,
+      "documentation": 6
+    }
+  },
+  {
+    "hash": "538a1d71304f",
+    "findings": 1,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 0,
+    "nits": 1,
+    "compositeScore": 8.24,
+    "reviewerScores": {
+      "security": 8,
+      "testing": 8.5,
+      "clarity": 8,
+      "domain_sme": 8.5,
+      "frontend_ux": 8,
+      "documentation": 8.5
+    }
+  },
+  {
+    "hash": "b6799830a2a2",
+    "findings": 4,
+    "blockers": 1,
+    "majors": 2,
+    "minors": 1,
+    "nits": 0,
+    "compositeScore": 3.44,
+    "reviewerScores": {
+      "security": 4,
+      "testing": 3,
+      "clarity": 3,
+      "domain_sme": 3.5,
+      "frontend_ux": 4,
+      "documentation": 3
+    }
+  },
+  {
+    "hash": "a3d3bb076ad9",
+    "findings": 1,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 0,
+    "nits": 1,
+    "compositeScore": 8.24,
+    "reviewerScores": {
+      "security": 8,
+      "testing": 8.5,
+      "clarity": 8,
+      "domain_sme": 8.5,
+      "frontend_ux": 8,
+      "documentation": 8.5
+    }
+  },
+  {
+    "hash": "02535091973a",
+    "findings": 4,
+    "blockers": 1,
+    "majors": 2,
+    "minors": 1,
+    "nits": 0,
+    "compositeScore": 3.44,
+    "reviewerScores": {
+      "security": 4,
+      "testing": 3,
+      "clarity": 3,
+      "domain_sme": 3.5,
+      "frontend_ux": 4,
+      "documentation": 3
+    }
+  },
+  {
+    "hash": "86aa4a9b151c",
+    "findings": 1,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 0,
+    "nits": 1,
+    "compositeScore": 8.24,
+    "reviewerScores": {
+      "security": 8,
+      "testing": 8.5,
+      "clarity": 8,
+      "domain_sme": 8.5,
+      "frontend_ux": 8,
+      "documentation": 8.5
+    }
+  },
+  {
+    "hash": "33905fe4fa1e",
+    "findings": 3,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 2,
+    "nits": 1,
+    "compositeScore": 6.26,
+    "reviewerScores": {
+      "security": 6.5,
+      "testing": 6,
+      "clarity": 6.5,
+      "domain_sme": 6,
+      "frontend_ux": 6.5,
+      "documentation": 6
+    }
+  },
+  {
+    "hash": "d7f6ce8189e6",
+    "findings": 1,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 0,
+    "nits": 1,
+    "compositeScore": 8.24,
+    "reviewerScores": {
+      "security": 8,
+      "testing": 8.5,
+      "clarity": 8,
+      "domain_sme": 8.5,
+      "frontend_ux": 8,
+      "documentation": 8.5
+    }
+  },
+  {
+    "hash": "f6bb19abad59",
+    "findings": 4,
+    "blockers": 1,
+    "majors": 2,
+    "minors": 1,
+    "nits": 0,
+    "compositeScore": 3.44,
+    "reviewerScores": {
+      "security": 4,
+      "testing": 3,
+      "clarity": 3,
+      "domain_sme": 3.5,
+      "frontend_ux": 4,
+      "documentation": 3
+    }
+  },
+  {
+    "hash": "e3e45773eb7d",
+    "findings": 1,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 0,
+    "nits": 1,
+    "compositeScore": 8.24,
+    "reviewerScores": {
+      "security": 8,
+      "testing": 8.5,
+      "clarity": 8,
+      "domain_sme": 8.5,
+      "frontend_ux": 8,
+      "documentation": 8.5
+    }
+  }
+]

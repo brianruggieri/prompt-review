@@ -1,3 +1,31 @@
+const UNSAFE_OPERATIONS_SEVERITY = {
+	// Blockers: permanent data loss, system compromise
+	'DROP TABLE': 'blocker',
+	'DROP DATABASE': 'blocker',
+	'DELETE FROM': 'blocker',
+	'rm -rf': 'blocker',
+	'eval(': 'blocker',
+	'exec(': 'blocker',
+	'__import__': 'blocker',
+	'subprocess.call': 'blocker',
+	'os.system': 'blocker',
+
+	// Major: breaking changes, hard to recover
+	'git push --force': 'major',
+	'git reset --hard': 'major',
+	'git branch -D': 'major',
+	'TRUNCATE': 'major',
+	'chmod 777': 'major',
+	'chmod 000': 'major',
+	'ALTER TABLE': 'major',
+	'DROP COLUMN': 'major',
+
+	// Minor: risky but recoverable
+	'ln -s': 'minor',
+	'chmod 755': 'minor',
+	'chmod 644': 'minor',
+};
+
 const SYSTEM_PROMPT = `You are a Security reviewer for Claude Code prompts. Your job is to identify security risks in how the prompt instructs Claude to operate — injection vectors, secret exposure, unsafe tool use, and missing safety boundaries.
 
 You will receive the user's original prompt along with project context.
@@ -10,6 +38,8 @@ You will receive the user's original prompt along with project context.
 4. **Instruction hierarchy** — Does the prompt maintain clear boundaries between system instructions, user instructions, and data being processed?
 5. **Overprivileged operations** — Does the prompt grant more access or capability than needed for the task?
 6. **Output safety** — Could the generated output contain XSS, SQL injection, command injection, or other OWASP Top 10 vulnerabilities?
+   - **Template vulnerability:** If using templating engines (Handlebars, EJS, Pug, Jinja2), is output escaping explicitly mentioned?
+   - **HTML generation:** If generating HTML, is user data sanitization specified? (innerHTML, dangerouslySetInnerHTML are risky)
 
 ## Your Operations
 
@@ -19,9 +49,25 @@ You may suggest these operations:
 
 ## Severity Guide
 
-Security findings are **blocker** or **major** only:
-- **blocker** — Prompt actively risks secret exposure, data loss, or code injection
-- **major** — Prompt is missing standard security practices that should be explicit
+Security findings are classified by severity of impact:
+
+### **Blocker** — Permanent data loss or system compromise risk
+- Destructive database operations: DROP TABLE, DROP DATABASE, DELETE FROM..., TRUNCATE
+- Filesystem destruction: rm -rf, destructive shell scripts
+- Code execution vulnerabilities: eval(), exec(), __import__(), dangerous deserialization
+- Secret exposure: API key/credential generation or logging
+- Authentication bypass or injection vulnerabilities
+
+### **Major** — Breaking changes, hard to recover
+- Breaking git operations: git push --force, git reset --hard, git branch -D
+- System permission changes: chmod 777, chmod 000
+- Infrastructure modifications: security group changes, firewall rules
+- Data modifications (non-destructive): schema changes, data transformations
+
+### **Minor** — Risky but recoverable
+- File permission changes (limited): chmod 755, chmod 644
+- Symbolic links or redirects: ln -s, symlink creation
+- Non-destructive system operations: mkdir, touch, log operations
 
 ## Output Format
 
@@ -61,6 +107,54 @@ Additionally, include a "score" field (0-10) rating the prompt's safety posture:
 
 The score reflects the ORIGINAL prompt's quality, not the quality after your suggested fixes.`;
 
+const TEMPLATE_ENGINES = ['handlebars', 'ejs', 'pug', 'jinja2', 'mustache', 'nunjucks', 'liquid', 'hbs'];
+
+function detectTemplateLanguage(prompt) {
+	const lower = prompt.toLowerCase();
+	return TEMPLATE_ENGINES.find(eng => lower.includes(eng));
+}
+
+function checkTemplateOutputSafety(prompt) {
+	const findings = [];
+
+	const templateEngine = detectTemplateLanguage(prompt);
+	const usesTemplate = !!templateEngine;
+	const mentionsEscaping = /escap|sanitiz|encode|htmlentities|xss|safehtml|markup/i.test(prompt);
+	const mentionsUserData = /user (input|data)|untrusted|malicious|injection/i.test(prompt);
+
+	// Finding 1: Template without explicit escaping/sanitization
+	if (usesTemplate && !mentionsEscaping) {
+		findings.push({
+			severity: 'major',
+			confidence: 0.85,
+			issue: `Template engine ${templateEngine} used without explicit escaping/sanitization`,
+			evidence: `Prompt uses ${templateEngine} but doesn't mention escaping, sanitization, or XSS prevention`,
+		});
+	}
+
+	// Finding 2: Generic "Generate HTML" without guardrails
+	if (/generate.*html|create.*html|build.*html/i.test(prompt) && !mentionsEscaping) {
+		findings.push({
+			severity: 'major',
+			confidence: 0.80,
+			issue: 'HTML generation without explicit XSS prevention',
+			evidence: 'Prompt generates HTML but doesn\'t specify user data handling or escaping',
+		});
+	}
+
+	// Finding 3: innerHTML or similar risky operations
+	if (/innerhtml|dangerously.*html|raw.*html|html\s*=|document\.write/i.test(prompt) && !mentionsEscaping) {
+		findings.push({
+			severity: 'blocker',
+			confidence: 0.90,
+			issue: 'Direct HTML injection pattern detected',
+			evidence: 'Prompt mentions dangerous HTML patterns (innerHTML, dangerouslySetInnerHTML) without sanitization',
+		});
+	}
+
+	return findings;
+}
+
 function buildPrompt(originalPrompt, context) {
   let userContent = `## Original Prompt\n\n${originalPrompt}\n\n## Project Context\n\n`;
 
@@ -70,6 +164,12 @@ function buildPrompt(originalPrompt, context) {
   if (context.stack && context.stack.length > 0) {
     userContent += `**Stack:** ${context.stack.join(', ')}\n`;
   }
+
+	const templateEngine = detectTemplateLanguage(originalPrompt);
+	if (templateEngine) {
+		userContent += `**Note:** Prompt mentions template engine: ${templateEngine}. Check for XSS prevention guidance.\n`;
+	}
+
   if (context.conventions && context.conventions.length > 0) {
     userContent += `\n**Security-relevant conventions (from CLAUDE.md):**\n${context.conventions.filter(c => {
       const lower = c.toLowerCase();
@@ -86,4 +186,9 @@ module.exports = {
   buildPrompt,
   conditional: false,
   triggers: {},
+  UNSAFE_OPERATIONS_SEVERITY,
+  TEMPLATE_ENGINES,
+  detectTemplateLanguage,
+  checkTemplateOutputSafety,
+  SYSTEM_PROMPT,
 };

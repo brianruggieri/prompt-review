@@ -1,40 +1,131 @@
 {
+  "version": "2.0",
   "mode": "subscription",
   "api_fallback": true,
+  "phase1_improvements": {
+    "frontend_ux_multi_factor": true,
+    "security_severity_matrix": true,
+    "testing_bugfix_detection": true,
+    "clarity_domain_context": true
+  },
+  "phase2_improvements": {
+    "security_template_safety": true,
+    "documentation_maturity_aware": true,
+    "domain_sme_file_validation": true
+  },
+  "precision_thresholds": {
+    "security": 0.70,
+    "testing": 0.70,
+    "clarity": 0.65,
+    "domain_sme": 0.70,
+    "frontend_ux": 0.75,
+    "documentation": 0.60
+  },
+  "severity_matrix": {
+    "blocker": { "override_weight": 3.0, "requires_user_review": true },
+    "major": { "override_weight": 1.8 },
+    "minor": { "override_weight": 1.0 },
+    "nit": { "override_weight": 0.5 }
+  },
   "models": {
     "reviewer": "claude-haiku-4-5",
     "editor": "claude-sonnet-4-6"
   },
   "reviewers": {
-    "domain_sme":    { "enabled": true,  "conditional": false },
-    "security":      { "enabled": true,  "conditional": false },
-    "clarity":       { "enabled": true,  "conditional": false },
-    "testing":       { "enabled": true,  "conditional": false },
-    "frontend_ux":   { "enabled": true,  "conditional": true,
+    "domain_sme": {
+      "enabled": true,
+      "conditional": false
+    },
+    "security": {
+      "enabled": true,
+      "conditional": false
+    },
+    "clarity": {
+      "enabled": true,
+      "conditional": false
+    },
+    "testing": {
+      "enabled": true,
+      "conditional": false
+    },
+    "frontend_ux": {
+      "enabled": true,
+      "conditional": true,
       "triggers": {
-        "prompt_keywords": ["component", "modal", "CSS", "style", "layout",
-                            "form", "button", "a11y", "accessibility",
-                            "responsive", "UI", "UX", "settings tab"],
-        "file_patterns": ["*.css", "*.scss", "*.tsx", "*.vue", "*.svelte",
-                          "settings.ts", "styles.css"],
-        "stack_markers": ["react", "vue", "svelte", "nextjs", "tailwind",
-                          "obsidian-plugin"]
+        "prompt_keywords": [
+          "component",
+          "modal",
+          "CSS",
+          "style",
+          "layout",
+          "form",
+          "button",
+          "a11y",
+          "accessibility",
+          "responsive",
+          "UI",
+          "UX",
+          "settings tab"
+        ],
+        "file_patterns": [
+          "*.css",
+          "*.scss",
+          "*.tsx",
+          "*.vue",
+          "*.svelte",
+          "settings.ts",
+          "styles.css"
+        ],
+        "stack_markers": [
+          "react",
+          "vue",
+          "svelte",
+          "nextjs",
+          "tailwind",
+          "obsidian-plugin"
+        ]
       }
     },
-    "documentation": { "enabled": true,  "conditional": true,
+    "documentation": {
+      "enabled": true,
+      "conditional": true,
       "triggers": {
-        "prompt_keywords": ["feature", "add", "new", "remove", "change",
-                            "refactor", "setting", "command", "API"],
-        "project_markers": ["docs/", "screenshots/", "CHANGELOG", "README"],
-        "skip_keywords": ["bugfix", "typo", "lint", "format"]
+        "prompt_keywords": [
+          "feature",
+          "add",
+          "new",
+          "remove",
+          "change",
+          "refactor",
+          "setting",
+          "command",
+          "API"
+        ],
+        "project_markers": [
+          "docs/",
+          "screenshots/",
+          "CHANGELOG",
+          "README"
+        ],
+        "skip_keywords": [
+          "bugfix",
+          "typo",
+          "lint",
+          "format"
+        ]
       }
     }
   },
   "editor": {
-    "priority_order": ["security", "testing", "domain_sme", "documentation",
-                        "frontend_ux", "clarity"],
-    "temperature": 0,
-    "max_retries": 1
+    "priority_order": [
+      "security",
+      "testing",
+      "domain_sme",
+      "documentation",
+      "frontend_ux",
+      "clarity"
+    ],
+    "temperature": 0
   },
   "context": {
     "max_tokens": 2000,
@@ -45,27 +136,26 @@
   },
   "budget": {
     "max_reviewers_per_call": 6,
-    "timeout_ms": 8000,
-    "log_costs": true
+    "timeout_ms": 8000
   },
   "scoring": {
     "enabled": true,
     "display": true,
     "weights": {
-      "security": 2.0,
+      "security": 2,
       "testing": 1.5,
       "domain_sme": 1.5,
-      "documentation": 1.0,
-      "frontend_ux": 1.0,
-      "clarity": 1.0
+      "documentation": 1,
+      "frontend_ux": 1,
+      "clarity": 1
     },
     "weights_history": []
   },
   "reflection": {
     "min_reviews_for_adaptation": 5,
-    "precision_threshold": 0.70,
+    "precision_threshold": 0.7,
     "weight_clamp_min": 0.5,
-    "weight_clamp_max": 3.0,
+    "weight_clamp_max": 3,
     "auto_adapt": false,
     "auto_adapt_interval_days": 30
   },
@@ -75,5 +165,35 @@
     "model": "claude-haiku-4-5",
     "judge_model": "claude-sonnet-4-6",
     "min_conflicts_to_trigger": 1
+  },
+  "features": {
+    "reviewer_improvements": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "phase1_enabled": true,
+      "phase2_enabled": true
+    },
+    "maturity_aware_docs": {
+      "enabled": true,
+      "apply_to_projects": ["growing", "stable"],
+      "skip_projects": ["MVP"]
+    },
+    "strict_file_validation": {
+      "enabled": true,
+      "block_on_invalid": false,
+      "warn_only": true
+    }
+  },
+  "clarity_gate": {
+    "enabled": true,
+    "strict_mode": false,
+    "reject_on": [
+      "blocker"
+    ],
+    "warn_on": [
+      "major"
+    ],
+    "auto_refine": true,
+    "show_reasoning": true
   }
 }

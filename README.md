@@ -6,7 +6,7 @@ Automatically review your prompts for clarity, security, testing completeness, a
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen)](./tests/)
+[![Tests](https://img.shields.io/badge/tests-17%2F17%20passing-brightgreen)](./tests/)
 [![Claude SDK](https://img.shields.io/badge/Claude-SDK%20%3E%3D0.30.0-blueviolet)](https://github.com/anthropics/anthropic-sdk-python)
 
 ---
@@ -19,11 +19,12 @@ The system doesn't just review once. It tracks which suggestions you accept or r
 
 ### Key Features
 
+- **Clarity Gate** — Pre-screening runs only the Clarity reviewer first, rejecting/warning on ambiguous prompts before full review (saves time & resources)
 - **Parallel Specialist Review** — Six specialist roles evaluate your prompt simultaneously (security, testing, clarity, domain expertise, UX, documentation)
 - **Adaptive Learning** — System learns from your accept/reject decisions and reweights reviewer importance accordingly
 - **Conflict Resolution** — Optional debate mode when reviewers disagree, with LLM judge extracting quality insights
 - **Zero Dependencies** — CommonJS, Node.js built-ins only, no framework overhead
-- **Comprehensive Testing** — 12 passing tests covering all features and edge cases
+- **Comprehensive Testing** — 16 passing tests covering all features and edge cases
 - **Local Audit Trail** — Full review history stored locally with findings, stats, and outcomes
 
 ---
@@ -78,6 +79,39 @@ The system doesn't just review once. It tracks which suggestions you accept or r
         │  └─ Phase 3: Improve prompts   │
         └────────────────────────────────┘
 ```
+
+### Clarity Gate (Optional Pre-Screening)
+
+By default, the system uses a **two-stage review process**:
+
+1. **Stage 1: Clarity Gate** (fast, 5-10 seconds)
+   - Runs only the Clarity reviewer
+   - Checks for ambiguity, vagueness, undefined terms
+   - Blocks prompts with **blocker** severity
+   - Warns on **major** severity (user can choose to refine or proceed)
+   - Proceeds to full review on **minor/nit** severity
+
+2. **Stage 2: Full Review** (30-40 seconds if gate passes)
+   - All 6 specialist reviewers run in parallel
+   - Merge findings and present diff to user
+
+**Why the gate?** Saves time and resources by catching vague prompts early. A prompt like "do stuff with stuff" gets rejected at the gate with a clear message: "Please specify what 'stuff' is and what you want to do." The user refines it, and the second attempt passes the gate and gets the full review.
+
+**Configuration:**
+```json
+{
+  "clarity_gate": {
+    "enabled": true,
+    "strict_mode": false,
+    "reject_on": ["blocker"],
+    "warn_on": ["major"],
+    "auto_refine": true,
+    "show_reasoning": true
+  }
+}
+```
+
+To disable the gate, set `enabled: false` in `config.json`.
 
 ### The Three-Phase Learning System
 
@@ -150,6 +184,138 @@ Judge's feedback (to Testing):
 ```
 
 Policy proposals are written to `reviewers/prompts/<role>.txt` for human review before adoption. No automatic changes to code.
+
+---
+
+## Scoring System & Validation
+
+### Understanding Composite Scores
+
+Each review produces a **composite score** (0–10) combining individual specialist scores:
+
+```
+composite = Σ(score_i × weight_i) / Σ(weight_i)
+```
+
+**Example:** Security scores 8.0 (weight 1.2), Clarity scores 6.5 (weight 1.0):
+```
+composite = (8.0 × 1.2 + 6.5 × 1.0) / (1.2 + 1.0) = 7.32 / 10
+```
+
+### Score Interpretation
+
+| Range | Meaning | Action |
+|-------|---------|--------|
+| **0–3** | Poor | Prompt is entirely vague or ambiguous |
+| **4–6** | Needs Work | Significant issues affecting output quality |
+| **7–9** | Good | Minor improvements possible |
+| **10** | Excellent | Precise verbs, clear scope, output specified |
+
+### What Affects Scores?
+
+Each specialist rates on different criteria:
+
+- **Security** (weight 2.0): Is authentication, encryption, input validation addressed?
+- **Testing** (weight 1.5): Are acceptance criteria and test cases defined?
+- **Domain SME** (weight 1.5): Does the prompt match domain best practices?
+- **Documentation** (weight 1.0): Are output formats and usage documented?
+- **UX** (weight 1.0, conditional): If UI/component involved—accessibility, responsiveness?
+- **Clarity** (weight 1.0): Is scope defined? Are outputs specified? Are terms unambiguous?
+
+Higher-weight reviewers (security, testing) have more influence on the composite.
+
+### Validating Score Accuracy
+
+**Run a calibration check:**
+
+```bash
+node adapt.cjs 30 --benchmark
+```
+
+This compares your current adapted weights against equal weighting (all 1.0). Shows which specialist roles have highest real impact on acceptance rate.
+
+**Check post-adaptation impact:**
+
+```bash
+node adapt.cjs --history
+```
+
+Shows before/after precision for each weight change. Helps verify whether adapted weights actually improved feedback quality.
+
+### How Precision Is Measured
+
+**Precision** = `accepted findings / proposed findings`
+
+Example: If Security found 5 issues and user accepted 3:
+```
+precision = 3 / 5 = 0.60 (60%)
+```
+
+**Important limitations:**
+- Does NOT measure recall (how many issues Security missed)
+- Does NOT measure finding importance (all findings weighted equally)
+- May be influenced by user accepting findings for reasons other than correctness
+
+**For better precision signals, look at:**
+
+1. **Acceptance rate by severity**
+   - Major findings: What % of "blocker" findings did users actually fix?
+   - Minor findings: What % of "nit" suggestions were helpful?
+
+2. **Coverage ratio** (recall proxy)
+   - In what % of reviews did this reviewer find at least one accepted issue?
+   - Low coverage + high precision = "plays it safe" (risky pattern)
+
+3. **Rejection reason** (when tracked)
+   - "invalid" — Finding was wrong (true precision miss)
+   - "deferred" — Valid but out of scope (not precision miss)
+   - "conflict" — Conflicted with another finding (not precision miss)
+
+### Fairness & Bias Detection
+
+If one specialist dominates (>40% of composite score), you'll see a warning:
+
+```
+⚠ Fairness: Security dominates composite (>40%)
+```
+
+This means one reviewer's opinion outweighs the others. To rebalance:
+
+```bash
+# Check contribution share
+node index.cjs --stats
+
+# Then adjust weights in config.json:
+"weights": {
+  "security": 1.2,    # was 2.0, reduce
+  "clarity": 1.2      # was 1.0, increase
+}
+```
+
+### Running Evaluations
+
+**Check system health over last 30 days:**
+
+```bash
+node adapt.cjs 30
+```
+
+Shows:
+- Reviews analyzed
+- Precision per role
+- Weight suggestions based on performance
+
+**See historical trends:**
+
+```bash
+node index.cjs --stats
+```
+
+Shows:
+- Score trend by week
+- Most common issues
+- Reviewer effectiveness
+- Acceptance rates by severity
 
 ---
 
@@ -229,6 +395,105 @@ node adapt.cjs 30 --apply
 ```
 
 Your next reviews will use improved weights, better matching your preferences.
+
+---
+
+## Understanding Triggers: Hook vs Skill vs API
+
+The `!!!` trigger has three different behaviors depending on how you invoke it. Understanding these modes is key to using the tool effectively.
+
+### Hook Mode (Automatic)
+
+When you type a prompt in Claude Code with `!!!` at the end:
+
+```
+Write a function that validates email addresses !!!
+```
+
+**What happens:**
+1. The hook automatically triggers on any message (UserPromptSubmit)
+2. Claude receives instructions to run `/prompt-review:review` skill
+3. You see a notification to proceed with review
+4. You must explicitly invoke the skill to start
+
+**Key points:**
+- ✓ Automatic trigger (you don't need to do anything)
+- ✓ Works in all modes (no API key needed)
+- ✓ Safe and predictable (never executes code without your approval)
+- ✗ Requires manual skill invocation (not truly automatic execution)
+- ✗ Cannot run full async pipeline (uses subscription mode)
+
+### Skill Mode (Manual)
+
+When you explicitly invoke the skill with a prompt:
+
+```
+/prompt-review:review "Write a function that validates email addresses"
+```
+
+**What happens:**
+1. You explicitly request the review
+2. If `ANTHROPIC_API_KEY` is set and `config.mode='api'`, reviewers run in parallel and complete inline
+3. If no API key or `config.mode='subscription'`, you see instructions to use the skill
+4. Full debate mode can run if conflicts are detected (Phase 3)
+
+**Key points:**
+- ✓ Explicit, clear intent
+- ✓ Can use API mode if configured
+- ✓ Full async pipeline available
+- ✗ Manual invocation (you must remember to use it)
+
+### API Mode (Full Async)
+
+When you have `ANTHROPIC_API_KEY` set and `config.mode='api'`:
+
+```bash
+export ANTHROPIC_API_KEY="sk-..."
+node index.cjs "Write a function that validates email addresses"
+```
+
+**What happens:**
+1. All 6 reviewers run in parallel
+2. Results are merged with conflict detection
+3. Optional: Debate phase runs if conflicts exist
+4. Full output (refined prompt + findings) is returned
+5. Review is logged to audit trail
+
+**Key points:**
+- ✓ True async execution (all reviewers run in parallel)
+- ✓ Full debate mode support
+- ✓ Direct CLI/programmatic access
+- ✗ Requires API key
+- ✗ Not available via hook
+
+### Mode Comparison Table
+
+| Trigger | Mode | API Key | Execution | Debate | Best For |
+|---------|------|---------|-----------|--------|----------|
+| Hook | Subscription | Optional | Async (via Claude) | Yes* | Quick feedback while coding |
+| Skill | Subscription | Optional | Async (via Claude) | Yes* | Explicit reviews without API key |
+| Skill/CLI | API | Required | Sync (inline) | Yes | Full async pipeline in CI/automation |
+
+*Debate mode available if conflicts detected; proposals logged for review
+
+### Configuration
+
+To control which mode is used, edit `~/.claude/plugins/prompt-review/config.json`:
+
+```json
+{
+  "mode": "subscription",  // or "api" for full async
+  "api_fallback": true,    // Fall back to subscription if no API key
+  "reviewers": {
+    "security": { "enabled": true, "conditional": false },
+    ...
+  }
+}
+```
+
+**`mode` options:**
+- `"subscription"` (default) — Use Claude Code's skill system for reviews
+- `"api"` — Use direct async pipeline (requires ANTHROPIC_API_KEY)
 
 ---
 

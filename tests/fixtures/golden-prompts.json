@@ -1,0 +1,271 @@
+[
+	{
+		"id": "SEC-INJECTION-001",
+		"category": "security",
+		"quality": "bad",
+		"prompt": "Take the user's input from the form field and use it directly in the SQL query to look up their account. Build the query string by concatenating the username variable into the SELECT statement.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"security": {
+				"shouldFind": true,
+				"minSeverity": "blocker",
+				"mustMention": ["injection", "SQL", "parameterized"]
+			},
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["test"]
+			},
+			"clarity": {
+				"shouldFind": false,
+				"minSeverity": "nit",
+				"mustMention": []
+			}
+		},
+		"expectedScoreRange": { "security": [0, 3], "clarity": [5, 10] }
+	},
+	{
+		"id": "SEC-SECRETS-002",
+		"category": "security",
+		"quality": "bad",
+		"prompt": "Read the .env file and print the API keys to the console so I can debug. Also commit the .env.local file to git so the team can use the same keys.",
+		"expectedReviewers": ["security", "testing", "domain_sme"],
+		"expectedFindings": {
+			"security": {
+				"shouldFind": true,
+				"minSeverity": "blocker",
+				"mustMention": ["secret", "key", ".env", "commit"]
+			}
+		},
+		"expectedScoreRange": { "security": [0, 2] }
+	},
+	{
+		"id": "SEC-DESTRUCT-003",
+		"category": "security",
+		"quality": "bad",
+		"prompt": "Clean up the production database by running DROP TABLE on all tables that start with 'tmp_'. Connect using the root password stored in config.js.",
+		"expectedReviewers": ["security", "testing", "domain_sme"],
+		"expectedFindings": {
+			"security": {
+				"shouldFind": true,
+				"minSeverity": "blocker",
+				"mustMention": ["destructive", "DROP", "password"]
+			}
+		},
+		"expectedScoreRange": { "security": [0, 2] }
+	},
+	{
+		"id": "CLR-VAGUE-001",
+		"category": "clarity",
+		"quality": "bad",
+		"prompt": "Make it better.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"clarity": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["vague", "specific"]
+			},
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["test"]
+			}
+		},
+		"expectedScoreRange": { "clarity": [0, 3] }
+	},
+	{
+		"id": "CLR-VAGUE-002",
+		"category": "clarity",
+		"quality": "bad",
+		"prompt": "Optimize the app. Fix performance issues and clean up the code. Also improve the UI.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"clarity": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["vague", "scope", "ambiguous"]
+			}
+		},
+		"expectedScoreRange": { "clarity": [0, 4] }
+	},
+	{
+		"id": "CLR-MULTI-003",
+		"category": "clarity",
+		"quality": "bad",
+		"prompt": "Add user authentication with OAuth, also implement a shopping cart, fix the footer alignment, and update the deployment pipeline to use Docker.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"clarity": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["multiple", "separate"]
+			}
+		},
+		"expectedScoreRange": { "clarity": [1, 4] }
+	},
+	{
+		"id": "TST-MISSING-001",
+		"category": "testing",
+		"quality": "bad",
+		"prompt": "Refactor the authentication module to use JWT tokens instead of session cookies. Replace all session-based auth calls with JWT verification. Update the middleware chain.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "blocker",
+				"mustMention": ["test"]
+			},
+			"security": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["security"]
+			}
+		},
+		"expectedScoreRange": { "testing": [0, 4] }
+	},
+	{
+		"id": "GOOD-SPECIFIC-001",
+		"category": "good",
+		"quality": "good",
+		"prompt": "In src/auth/jwt.ts, replace the session-based authentication with JWT tokens. Specifically:\n1. Create a new function `generateJWT(userId: string): string` that signs a token with a 24h expiry using the existing APP_SECRET from env\n2. Update the `authMiddleware` in src/middleware/auth.ts to verify JWT from the Authorization header\n3. Remove the session store dependency from package.json\n4. Ensure all existing tests in tests/auth/ pass after changes\n5. Add new tests for token generation, verification, and expiry edge cases\n6. Run `npm test` to verify nothing is broken\n\nDo NOT store tokens in localStorage (use httpOnly cookies). Do NOT commit any secret values.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"security": {
+				"shouldFind": false,
+				"minSeverity": "nit",
+				"mustMention": []
+			},
+			"clarity": {
+				"shouldFind": false,
+				"minSeverity": "nit",
+				"mustMention": []
+			},
+			"testing": {
+				"shouldFind": false,
+				"minSeverity": "nit",
+				"mustMention": []
+			}
+		},
+		"expectedScoreRange": { "security": [7, 10], "clarity": [7, 10], "testing": [7, 10] }
+	},
+	{
+		"id": "GOOD-SPECIFIC-002",
+		"category": "good",
+		"quality": "good",
+		"prompt": "Add a dark mode toggle to the Settings page component at src/components/Settings.tsx. Requirements:\n- Use the existing ThemeContext from src/context/theme.ts\n- Toggle should be a Switch component from our Radix UI library\n- Persist preference in localStorage under 'theme-preference'\n- Must work in both light and dark modes (test with Storybook)\n- Add aria-label 'Toggle dark mode' for accessibility\n- Add a unit test in tests/components/Settings.test.tsx verifying the toggle changes theme context\n- Run `npm run test && npm run storybook:build` when done",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme", "frontend_ux"],
+		"expectedFindings": {
+			"clarity": {
+				"shouldFind": false,
+				"minSeverity": "nit",
+				"mustMention": []
+			},
+			"frontend_ux": {
+				"shouldFind": false,
+				"minSeverity": "nit",
+				"mustMention": []
+			}
+		},
+		"expectedScoreRange": { "clarity": [7, 10], "frontend_ux": [6, 10], "testing": [7, 10] }
+	},
+	{
+		"id": "UX-MISSING-001",
+		"category": "frontend_ux",
+		"quality": "bad",
+		"prompt": "Build a modal dialog component for user registration. It should have a form with name, email, and password fields and a submit button.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme", "frontend_ux"],
+		"expectedFindings": {
+			"frontend_ux": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["accessibility", "keyboard"]
+			},
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["test"]
+			}
+		},
+		"expectedScoreRange": { "frontend_ux": [1, 5] }
+	},
+	{
+		"id": "SEC-XSS-004",
+		"category": "security",
+		"quality": "bad",
+		"prompt": "Take the user's comment text and insert it directly into the page HTML using innerHTML. Display it inside the comments div.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"security": {
+				"shouldFind": true,
+				"minSeverity": "blocker",
+				"mustMention": ["XSS", "innerHTML", "sanitize"]
+			}
+		},
+		"expectedScoreRange": { "security": [0, 3] }
+	},
+	{
+		"id": "DOC-MISSING-001",
+		"category": "documentation",
+		"quality": "bad",
+		"prompt": "Add a new CLI command called 'export' that dumps all user data to a CSV file. The command should accept --format and --output flags.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme", "documentation"],
+		"expectedFindings": {
+			"documentation": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["README", "document"]
+			},
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["test"]
+			}
+		},
+		"expectedScoreRange": { "documentation": [0, 4] }
+	},
+	{
+		"id": "EDGE-EMPTY-001",
+		"category": "edge",
+		"quality": "bad",
+		"prompt": "",
+		"expectedReviewers": [],
+		"expectedFindings": {},
+		"expectedScoreRange": {}
+	},
+	{
+		"id": "EDGE-UNICODE-002",
+		"category": "edge",
+		"quality": "neutral",
+		"prompt": "修复登录页面的bug。用户输入密码后点击登录按钮没有反应。请添加错误处理和loading状态。",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "minor",
+				"mustMention": ["test"]
+			}
+		},
+		"expectedScoreRange": {}
+	},
+	{
+		"id": "EDGE-LONG-003",
+		"category": "edge",
+		"quality": "neutral",
+		"prompt": "I need you to build a complete user management system. First, create the database schema with tables for users, roles, permissions, sessions, and audit_logs. The users table needs columns for id (UUID), email (unique), password_hash, first_name, last_name, avatar_url, created_at, updated_at, last_login_at, is_active, is_verified, verification_token, reset_token, reset_token_expires, mfa_enabled, mfa_secret, failed_login_attempts, locked_until. The roles table needs id, name (unique), description, created_at. The permissions table needs id, resource, action, created_at. Then create a many-to-many join table for user_roles and role_permissions. Create the migration files. Then build the API layer with Express routes for POST /auth/register, POST /auth/login, POST /auth/logout, POST /auth/forgot-password, POST /auth/reset-password, GET /auth/verify-email/:token, POST /auth/enable-mfa, POST /auth/verify-mfa, GET /users/me, PATCH /users/me, GET /users (admin only), GET /users/:id (admin only), PATCH /users/:id/roles (admin only), DELETE /users/:id (admin only). Each route needs input validation with Joi, rate limiting, proper error responses with consistent format, and appropriate HTTP status codes. Build the service layer with UserService, AuthService, RoleService, and PermissionService classes. Use bcrypt for password hashing with 12 rounds. Use jsonwebtoken for JWT with refresh token rotation. Implement RBAC middleware that checks user permissions against route requirements. Add request logging middleware. Add CORS configuration. Set up Swagger/OpenAPI documentation for all endpoints.",
+		"expectedReviewers": ["security", "clarity", "testing", "domain_sme"],
+		"expectedFindings": {
+			"clarity": {
+				"shouldFind": true,
+				"minSeverity": "major",
+				"mustMention": ["scope", "multiple"]
+			},
+			"testing": {
+				"shouldFind": true,
+				"minSeverity": "blocker",
+				"mustMention": ["test"]
+			}
+		},
+		"expectedScoreRange": { "clarity": [3, 7] }
+	}
+]

@@ -23,6 +23,34 @@ USER INPUT
    ▼
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
+│ CLARITY GATE (Optional Early Filter)                                         │
+│ [Only if clarity_gate.enabled=true in config]                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+RUN CLARITY REVIEWER ONLY:
+   │
+   ├─ Scope: Check prompt for ambiguity, vagueness, undefined terms
+   ├─ Returns: { severity_max: "blocker" | "major" | "minor" | "nit", ... }
+   │
+   ▼
+
+DETERMINE GATE ACTION:
+   │
+   ├─ IF severity_max IN reject_on list ("blocker" by default)
+   │  └─ BLOCK: Return gate rejection, suggest refinement
+   │
+   ├─ ELIF severity_max IN warn_on list ("major" by default)
+   │  └─ WARN: Show message, user can choose to refine or proceed
+   │
+   └─ ELSE (minor or nit)
+      └─ PROCEED: Continue to full review
+   │
+   ▼
+
+[If gate blocks] → Return to user with gate message
+[If gate proceeds] → Continue to PHASE 1
+
+┌──────────────────────────────────────────────────────────────────────────────┐
 │ PHASE 1: FAN-OUT REVIEWERS (Parallel Specialist Review)                     │
 └──────────────────────────────────────────────────────────────────────────────┘
 

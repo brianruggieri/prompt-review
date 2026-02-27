@@ -1,3 +1,57 @@
+const DOMAIN_AWARE_VAGUE_TERMS = {
+	database: {
+		acceptable: [
+			'optimize queries (means: improve query performance/structure)',
+			'improve schema (means: normalize or denormalize appropriately)',
+			'clean up data (means: remove orphaned records, consolidate tables)',
+		],
+		vague: [
+			'optimize',
+			'improve',
+			'clean up',
+		],
+	},
+	backend: {
+		acceptable: [
+			'optimize performance (means: reduce latency/memory)',
+			'improve error handling (means: add specific error types)',
+			'refactor internals (means: change structure, not behavior)',
+		],
+		vague: [
+			'optimize',
+			'improve',
+			'refactor',
+		],
+	},
+	frontend: {
+		acceptable: [],
+		vague: [
+			'optimize (need: cache invalidation? minification? render?)',
+			'improve (need: visual polish? responsiveness? accessibility?)',
+			'clean up (need: remove dead code? reorganize files?)',
+		],
+	},
+	general: {
+		acceptable: [],
+		vague: [
+			'optimize',
+			'improve',
+			'fix',
+			'clean up',
+			'refactor',
+		],
+	},
+};
+
+function inferDomain(stack) {
+	if (!stack) return 'general';
+	const stackLower = stack.map(s => s.toLowerCase()).join(' ');
+	if (stackLower.includes('postgres') || stackLower.includes('mysql') || stackLower.includes('mongo')) return 'database';
+	if (stackLower.includes('rust') || stackLower.includes('go') || stackLower.includes('python') || stackLower.includes('backend')) return 'backend';
+	if (stackLower.includes('react') || stackLower.includes('vue') || stackLower.includes('tailwind') || stackLower.includes('frontend')) return 'frontend';
+	return 'general';
+}
+
 const SYSTEM_PROMPT = `You are a Clarity and Structure reviewer for Claude Code prompts. Your job is to identify vague language, ambiguous scope, missing output specifications, and structural issues that would cause Claude to guess rather than execute precisely.
 
 You will receive the user's original prompt along with project context.
@@ -5,6 +59,7 @@ You will receive the user's original prompt along with project context.
 ## What You Check
 
 1. **Vague verbs** — Does the prompt use imprecise verbs like "optimize", "improve", "clean up", "fix" without measurable criteria? These force Claude to guess what "good" looks like.
+   - EXCEPTION: In backend/database contexts, domain-standard terms like "optimize queries" or "improve schema" are acceptable because they have conventional meanings in those domains.
 2. **Missing output format** — Does the prompt specify what the output should look like? (e.g., "return a function" vs. "modify the existing file" vs. "create a new module")
 3. **Ambiguous scope** — Is it clear exactly which files, functions, or components should be changed? Or could Claude interpret the scope too broadly or too narrowly?
 4. **Multiple unrelated requests** — Does the prompt bundle several unrelated tasks that should be separate prompts?
@@ -68,6 +123,16 @@ function buildPrompt(originalPrompt, context) {
   if (context.projectName) {
     userContent += `**Project:** ${context.projectName}\n`;
   }
+
+  const domain = inferDomain(context.stack);
+  if (domain !== 'general') {
+    userContent += `**Project Domain:** ${domain}\n`;
+    const allowedTerms = DOMAIN_AWARE_VAGUE_TERMS[domain]?.acceptable || [];
+    if (allowedTerms.length > 0) {
+      userContent += `**Domain-Acceptable Vague Terms:** ${allowedTerms.join(', ')}\n`;
+    }
+  }
+
   if (context.stack && context.stack.length > 0) {
     userContent += `**Stack:** ${context.stack.join(', ')}\n`;
   }
@@ -83,4 +148,7 @@ module.exports = {
   buildPrompt,
   conditional: false,
   triggers: {},
+  DOMAIN_AWARE_VAGUE_TERMS,
+  inferDomain,
+  SYSTEM_PROMPT,
 };

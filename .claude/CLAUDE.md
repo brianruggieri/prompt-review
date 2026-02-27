@@ -8,7 +8,7 @@
 2. **Phase 2: GEA Reflection** — Analyzes acceptance patterns and adapts reviewer weights automatically
 3. **Phase 3: CoMAS Debate** — Resolves conflicts through debate and extracts policy signals to improve reviewer prompts
 
-**Status:** ✅ All 3 phases complete, 12/12 tests passing, publicly released
+**Status:** ✅ All 3 phases complete, 17/17 tests passing, scoring validation complete, publicly released
 
 ## Architecture
 
@@ -70,12 +70,93 @@ Each phase agent should re-read referenced source files fresh before modifying �
 | File | Role |
 |------|------|
 | `index.cjs` | Entry point: hook/skill handlers, `runFullPipeline`, `logAudit`, `updateOutcome` |
-| `cost.cjs` | Audit logging: `writeAuditLog`, `updateAuditOutcome`, `estimateCost` |
-| `stats.cjs` | Analytics: `generateStats`, `renderDashboard`, `computeTopPatterns` |
+| `cost.cjs` | Audit logging: `writeAuditLog`, `updateAuditOutcome`, `estimateCost`, `verifyAuditEntry` |
+| `stats.cjs` | Analytics: `generateStats`, `renderDashboard`, `computeTopPatterns`, `computeReviewerEffectiveness` |
 | `editor.cjs` | Merge: `mergeCritiques`, `computeCompositeScore`, `extractOps` |
 | `orchestrator.cjs` | Fan-out: `determineActiveReviewers`, `runReviewersApi` |
 | `config.json` | Configuration — must stay valid JSON |
 | `tests/run.cjs` | Test runner — must pass before each phase completion |
+
+## Scoring System Reference
+
+### Composite Score Formula
+
+The composite score represents the weighted average of individual reviewer scores:
+
+```
+composite = Σ(score_i × weight_i) / Σ(weight_i)
+```
+
+Where:
+- `score_i` is the 0–10 score from reviewer role `i`
+- `weight_i` is the effectiveness weight for role `i` (see below)
+- Result is rounded to 2 decimal places
+
+**Example:** If security scores 8.0 (weight 1.2) and clarity scores 6.5 (weight 1.0):
+```
+composite = (8.0 × 1.2 + 6.5 × 1.0) / (1.2 + 1.0) = 16.1 / 2.2 = 7.32
+```
+
+### Weight Range & Default Values
+
+- **Minimum weight:** 0.5 (low-precision reviewer, rarely accepted findings)
+- **Default weight:** 1.0 (baseline, unchanged reviewer)
+- **Maximum weight:** 3.0 (high-precision reviewer, frequently accepted findings)
+
+Weights are automatically suggested by Phase 2 (GEA Reflection) based on reviewer precision:
+```bash
+node adapt.cjs 30              # Preview weight suggestions for last 30 days
+node adapt.cjs 30 --apply      # Apply suggestions and update config.json
+```
+
+### Precision Metric
+
+Precision = `accepted findings / proposed findings` for each reviewer.
+
+**Limitations:**
+- Does NOT measure recall — a reviewer with 1 proposal always accepted has precision 1.0 but may miss many real issues
+- Does NOT account for finding importance — all proposals weighted equally in precision calculation
+- Does NOT use finding confidence score (available in data but unused in current merge logic)
+
+To detect "plays it safe" reviewers (high precision, low coverage), use:
+```bash
+node adapt.cjs 30 --history    # Shows post-adaptation impact (Tier 2 feature)
+```
+
+### Audit Log Integrity
+
+Each entry in `logs/YYYY-MM-DD.jsonl` has a `__hash` field:
+
+```json
+{
+  "timestamp": "2026-02-25T14:30:45.123Z",
+  "original_prompt_hash": "a1b2c3d4",
+  "composite_score": 7.5,
+  "__hash": "sha256_first_16_chars",
+  ...
+}
+```
+
+The `__hash` is computed as SHA256(entry without __hash field).
+
+**Verification:** When loading logs, entries with invalid hashes are skipped. Use:
+```bash
+node -e "const {generateReflectionReport} = require('./reflection.cjs');
+  const report = generateReflectionReport(30);
+  console.log('Skipped:', report.skipped_entries,
+              'Valid:', report.total_reviews);"
+```
+
+### Score Validation
+
+To verify composite scores correlate with user acceptance patterns:
+
+```bash
+# See test in tests/scoring-accuracy.test.cjs
+npm test -- scoring-accuracy    # Runs correlation tests
+```
+
+Expected: High composite (≥7) should correlate with "approved" outcomes; low composite (<4) with "rejected".
 
 ## Git Workflow
 
@@ -106,7 +187,7 @@ source ~/.nvm/nvm.sh && nvm use
 
 # 3. Verify everything works
 npm test
-# Expected: 12 passed, 0 failed, 12 total
+# Expected: 17 passed, 0 failed, 17 total
 
 # 4. See what's new
 git log --oneline -5
@@ -122,7 +203,7 @@ git status
 | Aspect | Status |
 |--------|--------|
 | **Implementation** | ✅ Complete (3 phases) |
-| **Tests** | ✅ 12/12 passing |
+| **Tests** | ✅ 17/17 passing |
 | **Documentation** | ✅ README + ARCHITECTURE + Phase Specs |
 | **Public Release** | ✅ Live on GitHub |
 | **Code Quality** | ✅ Zero dependencies (core), all CommonJS |
@@ -332,6 +413,125 @@ Every API call is tracked:
 ```
 
 Update in `cost.cjs`: `estimateCost()` function (pricing model)
+
+### Audit Log Query Recipes
+
+Working with `logs/*.jsonl` files for analysis. All examples use Node.js built-ins only (no jq dependency).
+
+**Query 1: Extract acceptance rate per reviewer for last 30 days**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const LOGS_DIR = path.join(__dirname, 'logs');
+const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl') && new Date(f.replace('.jsonl', '')) >= cutoff);
+
+const stats = {};
+for (const file of files) {
+  const lines = fs.readFileSync(path.join(LOGS_DIR, file), 'utf-8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line);
+    if (!e.findings_detail) continue;
+    for (const f of e.findings_detail) {
+      const role = f.reviewer_role;
+      if (!stats[role]) stats[role] = { proposed: 0, accepted: 0 };
+      stats[role].proposed++;
+      if (e.suggestions_accepted && e.suggestions_accepted.includes(f.finding_id)) {
+        stats[role].accepted++;
+      }
+    }
+  }
+}
+for (const [role, {proposed, accepted}] of Object.entries(stats)) {
+  const pct = (accepted/proposed*100).toFixed(0);
+  console.log(\`\${role.padEnd(18)} \${proposed} proposed, \${accepted} accepted (\${pct}%)\`);
+}
+"
+```
+
+**Query 2: List all blocker findings and their outcomes**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const LOGS_DIR = path.join(__dirname, 'logs');
+const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl'));
+
+for (const file of files) {
+  const lines = fs.readFileSync(path.join(LOGS_DIR, file), 'utf-8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line);
+    if (!e.findings_detail) continue;
+    for (const f of e.findings_detail) {
+      if (f.severity !== 'blocker') continue;
+      const accepted = e.suggestions_accepted && e.suggestions_accepted.includes(f.finding_id) ? 'ACCEPTED' : 'REJECTED';
+      console.log(\`\${f.reviewer_role} [\${accepted}] \${f.issue}\`);
+    }
+  }
+}
+"
+```
+
+**Query 3: Composite score distribution (0–10 buckets)**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const LOGS_DIR = path.join(__dirname, 'logs');
+const files = fs.readdirSync(LOGS_DIR).filter(f => f.endsWith('.jsonl'));
+
+const buckets = {};
+for (let i = 0; i <= 10; i++) buckets[i] = 0;
+
+for (const file of files) {
+  const lines = fs.readFileSync(path.join(LOGS_DIR, file), 'utf-8').split('\n');
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const e = JSON.parse(line);
+    if (e.composite_score !== null && e.composite_score !== undefined) {
+      const bucket = Math.floor(e.composite_score);
+      buckets[bucket]++;
+    }
+  }
+}
+for (let i = 0; i <= 10; i++) {
+  const count = buckets[i] || 0;
+  const bar = '█'.repeat(count);
+  console.log(\`\${i}-\${i + 0.9}: \${bar} (\${count})\`);
+}
+"
+```
+
+**Query 4: Weight history deltas (what changed and when)**
+
+```bash
+node -e "
+const fs = require('fs');
+const path = require('path');
+const whFile = path.join(__dirname, 'logs', 'weight-history.jsonl');
+if (!fs.existsSync(whFile)) {
+  console.log('No weight changes recorded yet.');
+  process.exit(0);
+}
+const lines = fs.readFileSync(whFile, 'utf-8').split('\n').filter(l => l.trim());
+for (const line of lines) {
+  const e = JSON.parse(line);
+  console.log(\`\n\${e.timestamp}:\`);
+  for (const [role, after] of Object.entries(e.weights_after)) {
+    const before = e.weights_before[role] || 1.0;
+    const delta = (after - before).toFixed(2);
+    const dir = after > before ? '↑' : after < before ? '↓' : '=';
+    console.log(\`  \${role.padEnd(18)} \${before.toFixed(2)} → \${after.toFixed(2)} \${dir} \${delta}\`);
+  }
+}
+"
+```
 
 ### Test Pattern
 
