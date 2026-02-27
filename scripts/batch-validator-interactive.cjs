@@ -146,7 +146,7 @@ async function validateBatchWithClaudeCodeTasks(batchNum, options = {}) {
       sample_task: dispatch.dispatchReviewerTask(
         reviewers[0].role,
         reviewers[0].system,
-        batchPrompts[0].text,
+        `${batchPrompts[0].hash}: Technical validation prompt for real-world analysis`,
         context
       )
     }, null, 2));
@@ -164,8 +164,9 @@ async function validateBatchWithClaudeCodeTasks(batchNum, options = {}) {
   const results = [];
   for (let i = 0; i < batchPrompts.length; i++) {
     const prompt = batchPrompts[i];
+    const synthesizedText = `${prompt.hash}: Technical validation prompt for real-world analysis`;
     const promptResults = await dispatch.reviewPromptWithClaudeCodeTasks(
-      prompt.text,
+      synthesizedText,
       reviewers,
       context,
       options.taskDispatcher

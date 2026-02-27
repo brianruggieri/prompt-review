@@ -332,7 +332,6 @@ function computeContributionShare(entries, weights) {
 
   for (const entry of entries) {
     if (!entry.scores || entry.composite_score === null) continue;
-    entryCount++;
 
     // Normalize by total weighted score so each entry's contributions sum to 1
     // (not by sum-of-weights, which would produce values in score-point range ~0-10)
@@ -342,6 +341,7 @@ function computeContributionShare(entries, weights) {
     }, 0);
 
     if (totalWeightedScore === 0) continue;
+    entryCount++; // only count entries that actually contribute data
 
     for (const [role, score] of Object.entries(entry.scores)) {
       const weight = weights[role] || 1.0;

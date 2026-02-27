@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { readAuditLogs, computeScoreTrend, computeOutcomes, computeSeverityTrend, computeTopPatterns } = require('../stats.cjs');
+const { readAuditLogs, computeScoreTrend, computeOutcomes, computeSeverityTrend, computeTopPatterns, computeContributionShare } = require('../stats.cjs');
 
 // Test: readAuditLogs parses JSONL entries
 {
@@ -76,6 +76,71 @@ const { readAuditLogs, computeScoreTrend, computeOutcomes, computeSeverityTrend,
   const outcomes = computeOutcomes(entries);
   assert.strictEqual(trend.length, 0);
   assert.strictEqual(outcomes.total, 0);
+}
+
+// ─── computeContributionShare tests ──────────────────────────────────────────
+
+// Shares must sum to 1.0 per entry (normalized by weighted-score, not by weight count)
+{
+	const entries = [
+		{ scores: { security: 8.0, clarity: 4.0 }, composite_score: 6.0 },
+	];
+	const weights = { security: 1.0, clarity: 1.0 };
+	const result = computeContributionShare(entries, weights);
+	const share = result.contribution_share;
+	const total = Object.values(share).reduce((s, v) => s + v, 0);
+	assert.ok(Math.abs(total - 1.0) < 0.001, `Shares must sum to 1.0, got ${total}`);
+}
+
+// Dominant role detected correctly when one role provides > 40% of weighted score
+{
+	const entries = [
+		{ scores: { security: 9.0, clarity: 1.0 }, composite_score: 5.0 },
+		{ scores: { security: 9.0, clarity: 1.0 }, composite_score: 5.0 },
+	];
+	const weights = { security: 1.0, clarity: 1.0 };
+	const result = computeContributionShare(entries, weights);
+	assert.ok(result.dominant_roles.includes('security'), 'security should be dominant (90% of weighted score)');
+	assert.ok(!result.dominant_roles.includes('clarity'), 'clarity should not be dominant (10% of weighted score)');
+}
+
+// No dominant roles when shares are balanced
+{
+	const entries = [
+		{ scores: { security: 5.0, clarity: 5.0, testing: 5.0 }, composite_score: 5.0 },
+	];
+	const weights = { security: 1.0, clarity: 1.0, testing: 1.0 };
+	const result = computeContributionShare(entries, weights);
+	assert.strictEqual(result.dominant_roles.length, 0, 'No dominant roles when scores are equal');
+}
+
+// Missing weights default to 1.0 without crashing
+{
+	const entries = [
+		{ scores: { security: 6.0, clarity: 4.0 }, composite_score: 5.0 },
+	];
+	const result = computeContributionShare(entries, {}); // no weights provided
+	assert.ok(result.contribution_share, 'Must return contribution_share with default weights');
+	const total = Object.values(result.contribution_share).reduce((s, v) => s + v, 0);
+	assert.ok(Math.abs(total - 1.0) < 0.001, 'Shares must sum to 1.0 with default weights');
+}
+
+// Empty entries returns empty shares without crashing
+{
+	const result = computeContributionShare([], { security: 1.0 });
+	assert.deepStrictEqual(result, {}, 'Empty entries must return empty object');
+}
+
+// Entries with all-zero scores are skipped (avoid division by zero)
+{
+	const entries = [
+		{ scores: { security: 0.0, clarity: 0.0 }, composite_score: 0.0 },
+		{ scores: { security: 6.0, clarity: 4.0 }, composite_score: 5.0 },
+	];
+	const weights = { security: 1.0, clarity: 1.0 };
+	const result = computeContributionShare(entries, weights);
+	const total = Object.values(result.contribution_share).reduce((s, v) => s + v, 0);
+	assert.ok(Math.abs(total - 1.0) < 0.001, 'All-zero entry is skipped; remaining shares sum to 1.0');
 }
 
 console.log('stats.test: all tests passed');
