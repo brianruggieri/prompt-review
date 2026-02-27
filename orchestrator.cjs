@@ -56,7 +56,7 @@ function shouldFireFrontendUX(triggers, prompt, context) {
   const uiFilePatterns = triggers.file_patterns || ['*.css', '*.scss', '*.tsx', '*.vue', '*.svelte'];
   const hasUIFiles = context.files && context.files.some(f => {
     return uiFilePatterns.some(pattern => {
-      const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+      const regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
       return regex.test(f);
     });
   });

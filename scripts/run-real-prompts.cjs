@@ -15,10 +15,12 @@ async function runSinglePrompt(hash) {
 		// (Claude Code dispatch - included in your subscription, zero cost)
 		const result = await runFullPipeline(
 			synthesizedPrompt,
-			process.cwd(),
-			'subscription',  // Subscription mode only: dispatch via Claude Code (no API costs)
-			null,   // no custom client
-			null    // default config
+			{
+				cwd: process.cwd(),
+				mode: 'subscription',  // Subscription mode only: dispatch via Claude Code (no API costs)
+				client: null,          // no custom client
+				config: null           // default config
+			}
 		);
 
 		// Extract composite score and findings from result

@@ -82,8 +82,9 @@ function renderReviewBlock(data) {
   }
 
   // Fairness warning (if any role dominates > 40%)
-  if (data.dominantRoles && data.dominantRoles.length > 0) {
-    const dominantLabel = data.dominantRoles.map(r => ROLE_LABELS[r] || r).join(', ');
+  const dominantRoles = data.dominantRoles || data.dominant_roles;
+  if (dominantRoles && dominantRoles.length > 0) {
+    const dominantLabel = dominantRoles.map(r => ROLE_LABELS[r] || r).join(', ');
     lines.push(`| ⚠ Fairness: ${dominantLabel} dominates composite (>40%)   |`);
   }
 

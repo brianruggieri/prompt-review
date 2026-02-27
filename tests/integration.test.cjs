@@ -132,13 +132,13 @@ const crypto = require('crypto');
 	(async () => {
 		const result = await withTimeout(Promise.resolve('ok'), 1000, 'test');
 		assert.strictEqual(result, 'ok', 'Should resolve fast promises');
-	})();
+	})().catch(e => { throw e; });
 
 	// Should pass through when ms is 0
 	(async () => {
 		const result = await withTimeout(Promise.resolve('ok'), 0, 'test');
 		assert.strictEqual(result, 'ok', 'Should pass through when timeout is 0');
-	})();
+	})().catch(e => { throw e; });
 }
 
 console.log('integration.test: all tests passed');

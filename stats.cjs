@@ -334,16 +334,18 @@ function computeContributionShare(entries, weights) {
     if (!entry.scores || entry.composite_score === null) continue;
     entryCount++;
 
-    const denominatorSum = Object.keys(entry.scores).reduce((sum, role) => {
+    // Normalize by total weighted score so each entry's contributions sum to 1
+    // (not by sum-of-weights, which would produce values in score-point range ~0-10)
+    const totalWeightedScore = Object.entries(entry.scores).reduce((sum, [role, score]) => {
       const weight = weights[role] || 1.0;
-      return sum + weight;
+      return sum + score * weight;
     }, 0);
 
-    if (denominatorSum === 0) continue;
+    if (totalWeightedScore === 0) continue;
 
     for (const [role, score] of Object.entries(entry.scores)) {
       const weight = weights[role] || 1.0;
-      const contribution = (score * weight) / denominatorSum;
+      const contribution = (score * weight) / totalWeightedScore;
 
       if (!roleContributions[role]) {
         roleContributions[role] = 0;

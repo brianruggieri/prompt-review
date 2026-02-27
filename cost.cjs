@@ -88,11 +88,14 @@ function updateAuditOutcome(logDate, promptHash, outcome, acceptedIds, rejectedI
     try {
       const entry = JSON.parse(line);
       if (entry.original_prompt_hash === promptHash && entry.outcome === 'pending') {
-        // Verify hash before proceeding
-        const verification = verifyAuditEntry(entry);
-        if (!verification.valid) {
-          // Hash verification failed, skip this entry
-          return line;
+        // Verify hash before proceeding; treat missing __hash as unverifiable
+        // but updatable (legacy entries pre-dating hash support)
+        if (entry.__hash) {
+          const verification = verifyAuditEntry(entry);
+          if (!verification.valid) {
+            // Hash mismatch — entry may have been tampered; skip update
+            return line;
+          }
         }
 
         entry.outcome = outcome;

@@ -62,7 +62,7 @@ IMPORTANT: Return ONLY JSON. No explanation, no markdown, no code blocks. Just p
  * Dispatch a single reviewer as a Claude Code task (real Claude instance)
  * Called FROM within Claude Code session using the Task tool
  */
-async function dispatchReviewerTask(role, systemPrompt, prompt, context) {
+function dispatchReviewerTask(role, systemPrompt, prompt, context) {
   // This function signature is designed to be called by Task tool from Claude Code
   // It returns instructions for how to dispatch the task
 
@@ -130,7 +130,7 @@ function computeCompositeScore(scores, weights = {}) {
     totalWeight += weight;
   }
 
-  return totalWeight > 0 ? (weightedSum / totalWeight).toFixed(2) : 0;
+  return totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 100) / 100 : 0;
 }
 
 /**
