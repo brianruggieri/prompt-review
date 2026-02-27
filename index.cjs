@@ -52,7 +52,54 @@ function loadConfig(cwd) {
     config.budget.timeout_ms = parseInt(process.env.PROMPT_REVIEW_TIMEOUT);
   }
 
-  return config;
+  const validated = validateConfig(config);
+  if (validated.warnings.length > 0) {
+    process.stderr.write(`[prompt-review] Config warnings:\n${validated.warnings.map(w => `  - ${w}`).join('\n')}\n`);
+  }
+  return validated.config;
+}
+
+function validateConfig(config) {
+  const warnings = [];
+
+  // Validate weights are in [0.5, 3.0]
+  if (config.scoring?.weights) {
+    for (const [role, weight] of Object.entries(config.scoring.weights)) {
+      if (typeof weight !== 'number' || weight < 0.5 || weight > 3.0) {
+        warnings.push(`scoring.weights.${role} = ${weight} is outside [0.5, 3.0], clamping`);
+        config.scoring.weights[role] = Math.max(0.5, Math.min(3.0, Number(weight) || 1.0));
+      }
+    }
+  }
+
+  // Validate timeout_ms is a positive number
+  if (config.budget?.timeout_ms !== undefined) {
+    const val = config.budget.timeout_ms;
+    if (typeof val !== 'number' || val <= 0 || isNaN(val)) {
+      warnings.push(`budget.timeout_ms = ${val} is invalid, defaulting to 8000`);
+      config.budget.timeout_ms = 8000;
+    }
+  }
+
+  // Validate debate settings
+  if (config.debate?.max_pairs !== undefined) {
+    if (typeof config.debate.max_pairs !== 'number' || config.debate.max_pairs < 1) {
+      warnings.push(`debate.max_pairs = ${config.debate.max_pairs} is invalid, defaulting to 2`);
+      config.debate.max_pairs = 2;
+    }
+  }
+
+  // Validate reviewer enabled flags
+  if (config.reviewers) {
+    for (const [role, settings] of Object.entries(config.reviewers)) {
+      if (settings && typeof settings.enabled !== 'boolean') {
+        warnings.push(`reviewers.${role}.enabled is not boolean, defaulting to true`);
+        settings.enabled = true;
+      }
+    }
+  }
+
+  return { config, warnings };
 }
 
 function deepMerge(target, source) {
@@ -255,7 +302,8 @@ async function runFullPipeline(prompt, options) {
   try {
     // Fan-out: run all reviewers in parallel
     const reviewerModel = config.models?.reviewer || 'claude-haiku-4-5';
-    const results = await runReviewersApi(activeReviewers, prompt, context, apiKey, reviewerModel);
+    const timeoutMs = config.budget?.timeout_ms || 8000;
+    const results = await runReviewersApi(activeReviewers, prompt, context, apiKey, reviewerModel, timeoutMs);
 
     // Collect valid critiques
     const validCritiques = results
@@ -567,6 +615,7 @@ module.exports = {
   handleSkill,
   runFullPipeline,
   loadConfig,
+  validateConfig,
   deepMerge,
   updateOutcome,
 };

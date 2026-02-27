@@ -114,7 +114,7 @@ const { computeReviewerStats } = require('../cost.cjs');
 	const path = require('path');
 
 	const logsDir = path.join(__dirname, '..', 'logs');
-	const testDate = '2026-02-25';
+	const testDate = new Date().toISOString().slice(0, 10);
 	const testLogFile = path.join(logsDir, `${testDate}.jsonl`);
 
 	// Clean up before test
@@ -126,7 +126,7 @@ const { computeReviewerStats } = require('../cost.cjs');
 
 	// Write a test entry
 	const testEntry = {
-		timestamp: '2026-02-25T10:00:00Z',
+		timestamp: new Date().toISOString(),
 		project: 'test-phase1',
 		trigger: '!!!',
 		mode: 'subscription',

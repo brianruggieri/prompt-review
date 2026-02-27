@@ -33,8 +33,7 @@
   "editor": {
     "priority_order": ["security", "testing", "domain_sme", "documentation",
                         "frontend_ux", "clarity"],
-    "temperature": 0,
-    "max_retries": 1
+    "temperature": 0
   },
   "context": {
     "max_tokens": 2000,
@@ -45,8 +44,7 @@
   },
   "budget": {
     "max_reviewers_per_call": 6,
-    "timeout_ms": 8000,
-    "log_costs": true
+    "timeout_ms": 8000
   },
   "scoring": {
     "enabled": true,

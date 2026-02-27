@@ -225,4 +225,24 @@ function createMockEntries(count, options = {}) {
 		`Security outcome_correlation should be ${expectedCorrelation}, got ${report.reviewers.security.outcome_correlation}`);
 }
 
+// Test: Weight delta cap prevents aggressive swings
+{
+	const { computeWeightSuggestions } = require('../reflection.cjs');
+	// Create a scenario with extreme precision divergence
+	const reviewerMetrics = {
+		security: { review_count: 10, precision: 1.0, proposed: 20, accepted: 20, rejected: 0, outcome_correlation: 1.0 },
+		clarity: { review_count: 10, precision: 0.1, proposed: 20, accepted: 2, rejected: 18, outcome_correlation: 0.2 },
+	};
+	const currentWeights = { security: 1.0, clarity: 1.0 };
+	const suggestions = computeWeightSuggestions(reviewerMetrics, currentWeights, 5);
+
+	// With avg precision = 0.55, security scale = 1.0/0.55 = 1.82, clarity scale = 0.1/0.55 = 0.18
+	// Without delta cap: security would go to 1.82, clarity to 0.18 (clamped to 0.5)
+	// With delta cap: max change is ±0.5 per run
+	const secDelta = Math.abs(suggestions.security.suggested - currentWeights.security);
+	const clrDelta = Math.abs(suggestions.clarity.suggested - currentWeights.clarity);
+	assert.ok(secDelta <= 0.5 + 0.01, `Security delta ${secDelta} should be <= 0.5`);
+	assert.ok(clrDelta <= 0.5 + 0.01, `Clarity delta ${clrDelta} should be <= 0.5`);
+}
+
 console.log('reflection.test: all tests passed');

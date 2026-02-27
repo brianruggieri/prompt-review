@@ -8,7 +8,7 @@
 2. **Phase 2: GEA Reflection** — Analyzes acceptance patterns and adapts reviewer weights automatically
 3. **Phase 3: CoMAS Debate** — Resolves conflicts through debate and extracts policy signals to improve reviewer prompts
 
-**Status:** ✅ All 3 phases complete, 12/12 tests passing, publicly released
+**Status:** ✅ All 3 phases complete, 13/13 tests passing
 
 ## Architecture
 
@@ -106,7 +106,7 @@ source ~/.nvm/nvm.sh && nvm use
 
 # 3. Verify everything works
 npm test
-# Expected: 12 passed, 0 failed, 12 total
+# Expected: 13 passed, 0 failed, 13 total
 
 # 4. See what's new
 git log --oneline -5
@@ -122,7 +122,7 @@ git status
 | Aspect | Status |
 |--------|--------|
 | **Implementation** | ✅ Complete (3 phases) |
-| **Tests** | ✅ 12/12 passing |
+| **Tests** | ✅ 13/13 passing |
 | **Documentation** | ✅ README + ARCHITECTURE + Phase Specs |
 | **Public Release** | ✅ Live on GitHub |
 | **Code Quality** | ✅ Zero dependencies (core), all CommonJS |
@@ -440,8 +440,8 @@ logs/               — Audit trail (gitignored)
 
 ## Last Session Summary
 
-**Date:** 2026-02-25
-**Completed:** All 3 phases implementation + comprehensive documentation + public release
-**Status:** Production-ready, publicly available
-**Next Steps:** Optionally add features or extend specialist roles
-**Current Metrics:** 12/12 tests, 2,400+ lines of code, zero dependencies (core)
+**Date:** 2026-02-27
+**Completed:** Hardening pass — fixed date-dependent test, added timeout enforcement, JSON parse safety, weight delta cap, config validation, integration test, removed dead config fields
+**Status:** 13/13 tests passing, hardened for production
+**Next Steps:** Battle-test with real usage, consider enabling debate mode after phases 1-2 are proven
+**Current Metrics:** 13/13 tests, 2,500+ lines of code, zero dependencies (core)
