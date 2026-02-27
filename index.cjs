@@ -52,7 +52,55 @@ function loadConfig(cwd) {
     config.budget.timeout_ms = parseInt(process.env.PROMPT_REVIEW_TIMEOUT);
   }
 
-  return config;
+  const validated = validateConfig(config);
+  if (validated.warnings.length > 0) {
+    process.stderr.write(`[prompt-review] Config warnings:\n${validated.warnings.map(w => `  - ${w}`).join('\n')}\n`);
+  }
+  return validated.config;
+}
+
+function validateConfig(rawConfig) {
+  const config = JSON.parse(JSON.stringify(rawConfig));
+  const warnings = [];
+
+  // Validate weights are in [0.5, 3.0]
+  if (config.scoring?.weights) {
+    for (const [role, weight] of Object.entries(config.scoring.weights)) {
+      if (typeof weight !== 'number' || weight < 0.5 || weight > 3.0) {
+        warnings.push(`scoring.weights.${role} = ${weight} is outside [0.5, 3.0], clamping`);
+        config.scoring.weights[role] = Math.max(0.5, Math.min(3.0, Number(weight) || 1.0));
+      }
+    }
+  }
+
+  // Validate timeout_ms is a positive number
+  if (config.budget?.timeout_ms !== undefined) {
+    const val = config.budget.timeout_ms;
+    if (typeof val !== 'number' || val <= 0 || isNaN(val)) {
+      warnings.push(`budget.timeout_ms = ${val} is invalid, defaulting to 8000`);
+      config.budget.timeout_ms = 8000;
+    }
+  }
+
+  // Validate debate settings
+  if (config.debate?.max_pairs !== undefined) {
+    if (typeof config.debate.max_pairs !== 'number' || config.debate.max_pairs < 1) {
+      warnings.push(`debate.max_pairs = ${config.debate.max_pairs} is invalid, defaulting to 2`);
+      config.debate.max_pairs = 2;
+    }
+  }
+
+  // Validate reviewer enabled flags
+  if (config.reviewers) {
+    for (const [role, settings] of Object.entries(config.reviewers)) {
+      if (settings && typeof settings.enabled !== 'boolean') {
+        warnings.push(`reviewers.${role}.enabled is not boolean, defaulting to true`);
+        settings.enabled = true;
+      }
+    }
+  }
+
+  return { config, warnings };
 }
 
 function deepMerge(target, source) {
@@ -108,21 +156,7 @@ function handleHook(strippedPrompt) {
 
   if (activeReviewers.length === 0) return null;
 
-  // Determine if we're using subscription mode as fallback
-  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
-  const isApiModeRequested = config.mode === 'api';
-  const usingSubscriptionFallback = isApiModeRequested && !hasApiKey;
-
-  if (config.mode === 'subscription' || !hasApiKey) {
-    // Subscription mode: return additionalContext that tells Claude to use /prompt-review
-    return {
-      additionalContext: buildSubscriptionContext(strippedPrompt, activeReviewers, context, config),
-      warning: usingSubscriptionFallback ? 'API mode requested but no ANTHROPIC_API_KEY found; using subscription mode' : null,
-    };
-  }
-
-  // API mode would run inline, but for hook we still prefer subscription
-  // since the hook needs to return quickly
+  // Always use subscription mode (dispatch through Claude Code task system)
   return {
     additionalContext: buildSubscriptionContext(strippedPrompt, activeReviewers, context, config),
   };
@@ -134,26 +168,10 @@ function buildSubscriptionContext(prompt, activeReviewers, context, config) {
     'security', 'testing', 'domain_sme', 'documentation', 'frontend_ux', 'clarity'
   ];
 
-  // Determine execution mode for warning
-  const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
-  const isApiModeRequested = config.mode === 'api';
-  const usingSubscriptionFallback = isApiModeRequested && !hasApiKey;
-
   let instructions = `[PROMPT REVIEW TRIGGERED]
 
 The user's prompt has been flagged for review. Run the prompt review pipeline:
-`;
 
-  // Add warning if applicable
-  if (usingSubscriptionFallback) {
-    instructions += `⚠️  API mode was requested (config.mode='api') but ANTHROPIC_API_KEY is not set.
-Falling back to subscription mode (Claude-guided async review via /prompt-review:review skill).
-To use full async API mode, set ANTHROPIC_API_KEY environment variable or change config.mode to 'subscription'.
-
-`;
-  }
-
-  instructions += `
 ## Original Prompt (stripped of !!! trigger)
 
 ${prompt}
@@ -276,26 +294,6 @@ function handleSkill(prompt) {
 	const config = loadConfig(cwd);
 	const context = buildContext({ cwd, config: config.context });
 
-	// Stage 1: Check clarity gate (if enabled)
-	if (config.clarity_gate && config.clarity_gate.enabled) {
-		const clarityCheck = runClarityGateCheck(prompt, context, config);
-		if (clarityCheck) {
-			// Return gate check structure so Claude can run clarity review and report back
-			return {
-				_clarity_gate: true,
-				prompt,
-				gateCheckPrompt: clarityCheck.user,
-				gateCheckSystem: clarityCheck.system,
-				config: {
-					clarity_gate: config.clarity_gate,
-					editor: config.editor,
-				},
-				instruction: `Run CLARITY REVIEW ONLY. Return JSON response. If severity_max is blocker or major (depending on config), report gate decision.`,
-			};
-		}
-	}
-
-	// Stage 2: Gate passed or disabled; prepare full review
 	const activeReviewers = determineActiveReviewers(config, prompt, context);
 
 	return {
@@ -436,7 +434,7 @@ async function runFullPipelineSubscription(prompt, cwd, config, apiKey) {
 }
 
 /**
- * Run the full pipeline — supports both API mode (fast, costs money) and subscription mode (included, slower).
+ * Run the full pipeline in API mode — used when calling from CLI or CI.
  */
 async function runFullPipeline(prompt, options) {
   if (process.env.PROMPT_REVIEW_ENABLED === 'false') {
@@ -445,15 +443,8 @@ async function runFullPipeline(prompt, options) {
 
   const cwd = options?.cwd || process.cwd();
   const config = loadConfig(cwd);
-  const mode = options?.mode || config.mode || 'api';
   const apiKey = options?.apiKey || process.env.ANTHROPIC_API_KEY;
 
-  // Handle subscription mode (parallel dispatch)
-  if (mode === 'subscription') {
-    return await runFullPipelineSubscription(prompt, cwd, config, apiKey);
-  }
-
-  // API mode (requires API key)
   if (!apiKey) {
     return { error: 'No API key. Set ANTHROPIC_API_KEY or use subscription mode.' };
   }
@@ -471,7 +462,8 @@ async function runFullPipeline(prompt, options) {
   try {
     // Fan-out: run all reviewers in parallel
     const reviewerModel = config.models?.reviewer || 'claude-haiku-4-5';
-    const results = await runReviewersApi(activeReviewers, prompt, context, apiKey, reviewerModel);
+    const timeoutMs = config.budget?.timeout_ms || 8000;
+    const results = await runReviewersApi(activeReviewers, prompt, context, apiKey, reviewerModel, timeoutMs);
 
     // Collect valid critiques
     const validCritiques = results
@@ -783,6 +775,7 @@ module.exports = {
   handleSkill,
   runFullPipeline,
   loadConfig,
+  validateConfig,
   deepMerge,
   updateOutcome,
   runClarityGateCheck,

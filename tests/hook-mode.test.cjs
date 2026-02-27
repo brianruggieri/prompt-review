@@ -26,10 +26,9 @@ function testHookWithEmptyPrompt() {
 
 function testHookWarningFieldPresent() {
 	const result = handleHook('Test prompt');
-	assert(result.hasOwnProperty('warning'), 'Result should have warning field');
-	// In default subscription mode, warning should be null
-	assert(result.warning === null, 'Warning should be null in subscription mode (default)');
-	console.log('✓ Hook includes warning field (null when not applicable)');
+	// In subscription-only mode (no API fallback), warning field not present
+	assert(!result.hasOwnProperty('warning'), 'Result should not have warning field in subscription mode');
+	console.log('✓ Hook uses subscription mode only (no API fallback warning)');
 }
 
 function testHookActivatesReviewers() {

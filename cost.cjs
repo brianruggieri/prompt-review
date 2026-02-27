@@ -9,7 +9,8 @@ const PRICING = {
 };
 
 function estimateCost(model, inputTokens, outputTokens) {
-  const pricing = PRICING[model] || PRICING['claude-haiku-4-5'];
+  const pricing = PRICING[model];
+  if (!pricing) return 0;
   return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
 }
 

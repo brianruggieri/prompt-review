@@ -250,6 +250,14 @@ function computeWeightSuggestions(reviewerMetrics, currentWeights, minReviews) {
 		// Clamp to [0.5, 3.0]
 		suggestedWeight = Math.max(0.5, Math.min(3.0, suggestedWeight));
 
+		// Cap per-run delta to ±0.5 to prevent aggressive swings
+		const MAX_DELTA = 0.5;
+		const rawDelta = suggestedWeight - currentWeight;
+		if (Math.abs(rawDelta) > MAX_DELTA) {
+			suggestedWeight = currentWeight + (rawDelta > 0 ? MAX_DELTA : -MAX_DELTA);
+			suggestedWeight = Math.max(0.5, Math.min(3.0, suggestedWeight));
+		}
+
 		// Round to 2 decimal places
 		suggestedWeight = Math.round(suggestedWeight * 100) / 100;
 

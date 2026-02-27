@@ -2,6 +2,15 @@ const path = require('path');
 const fs = require('fs');
 const { validateCritique } = require('./schemas.cjs');
 
+function withTimeout(promise, ms, label) {
+	if (!ms || ms <= 0) return promise;
+	let timer;
+	const timeout = new Promise((_, reject) => {
+		timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+	});
+	return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const REVIEWER_FILES = {
   domain_sme: 'domain-sme.cjs',
   security: 'security.cjs',
@@ -155,7 +164,7 @@ function runReviewersSubscription(activeRoles, prompt, context) {
   return buildReviewerPrompts(activeRoles, prompt, context);
 }
 
-async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
+async function runReviewersApi(activeRoles, prompt, context, apiKey, model, timeoutMs) {
   // In API mode, call Anthropic API directly in parallel
   let Anthropic;
   try {
@@ -169,12 +178,16 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
 
   const results = await Promise.allSettled(
     reviewerPrompts.map(async ({ role, system, user }) => {
-      const response = await client.messages.create({
-        model: model || 'claude-haiku-4-5-20251001',
-        max_tokens: 2048,
-        system,
-        messages: [{ role: 'user', content: user }],
-      });
+      const response = await withTimeout(
+        client.messages.create({
+          model: model || 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          system,
+          messages: [{ role: 'user', content: user }],
+        }),
+        timeoutMs,
+        `Reviewer ${role}`
+      );
 
       const text = response.content
         .filter(b => b.type === 'text')
@@ -186,7 +199,12 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
       const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) jsonStr = jsonMatch[1];
 
-      const critique = JSON.parse(jsonStr.trim());
+      let critique;
+      try {
+        critique = JSON.parse(jsonStr.trim());
+      } catch (parseErr) {
+        throw new Error(`Failed to parse ${role} response as JSON: ${parseErr.message}. Response: "${text.slice(0, 80)}..."`);
+      }
       const validation = validateCritique(critique);
 
       return {
@@ -214,6 +232,7 @@ async function runReviewersApi(activeRoles, prompt, context, apiKey, model) {
 }
 
 module.exports = {
+  withTimeout,
   shouldFireConditional,
   shouldFireFrontendUX,
   determineActiveReviewers,
